@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en" data-page="{{ page }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_title }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <span class="brand-mark">PdM</span>
+    <span class="brand-text">{{ app_title }}</span>
+  </div>
+  <nav>
+    {% for href, label in nav %}
+      <a href="{{ href }}" class="{{ 'active' if request.url.path == href or (href != '/' and request.url.path.startswith(href)) else '' }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <div class="sidebar-foot">
+    <span class="badge badge-{{ 'csv' if backend=='csv' else 'mysql' }}">store: {{ backend }}</span>
+  </div>
+</aside>
+
+<div class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>{% block heading %}{{ app_title }}{% endblock %}</h1>
+    </div>
+    <div class="topbar-right">
+      <label class="ctl">
+        <span>Window</span>
+        <select id="global-window">
+          {% for w in windows %}<option value="{{ w }}" {{ 'selected' if w == default_window else '' }}>{{ w }}</option>{% endfor %}
+        </select>
+      </label>
+      <button id="run-all" class="btn btn-primary">Run PdM (all)</button>
+      <span id="run-status" class="run-status"></span>
+    </div>
+  </header>
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    Local / LAN only · data window anchors to latest available data · automation runs in the terminal process
+  </footer>
+</div>
+
+<script src="/static/js/charts.js"></script>
+<script src="/static/js/app.js"></script>
+{% block script %}{% endblock %}
+</body>
+</html>

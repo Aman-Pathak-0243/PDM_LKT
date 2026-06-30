@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block heading %}{{ module_title }}{% endblock %}
+{% block content %}
+<div id="module-root" data-module="{{ module_name }}">
+  <div class="section">
+    <div class="row">
+      <h3 style="margin:0">Per-component health</h3>
+      <span class="spacer"></span>
+      <button class="btn btn-sm btn-primary" onclick="PdM.runNow('{{ module_name }}')">Run {{ module_name }} now</button>
+    </div>
+    <p class="muted">Health 0–100, risk tier, predicted time-to-maintenance, confidence, and regime. Click a row for RCA + health trend.</p>
+    <div class="card table-wrap">
+      <table>
+        <thead><tr><th>Component</th><th>Health</th><th>Tier</th><th>Regime</th><th>TTM</th><th>Conf.</th><th class="wrap">Primary cause</th></tr></thead>
+        <tbody id="components"><tr><td colspan="7" class="empty">loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

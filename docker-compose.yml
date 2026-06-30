@@ -1,0 +1,31 @@
+# Local/LAN deployment for client delivery.
+# The app reaches Grafana (and, only when permitted, MySQL) on the host network /
+# company LAN. Runtime data persists on a named volume so triggers, history, and
+# the longitudinal store survive restarts. Automation runs inside the container
+# process — it keeps running whether or not a browser is connected.
+services:
+  pdm:
+    build: .
+    image: asrs-pdm:latest
+    container_name: asrs-pdm
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data/store_root
+      LOG_DIR: /data/logs
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8800
+      PLAYWRIGHT_HEADLESS: "true"
+    ports:
+      - "8800:8800"
+    volumes:
+      - pdm_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8800/api/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  pdm_data:

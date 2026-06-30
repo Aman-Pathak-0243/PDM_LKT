@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block heading %}PdM Triggers{% endblock %}
+{% block content %}
+<div class="section">
+  <p class="muted">Every manual and automated trigger, fully traceable: id, type, status, window, duration, success/total, time. Click a row for per-module run detail.</p>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>Trigger ID</th><th>Type</th><th>Module</th><th>Status</th><th>Window</th><th>Duration</th><th>OK/Total</th><th>Created</th></tr></thead>
+      <tbody id="triggers"><tr><td colspan="8" class="empty">loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

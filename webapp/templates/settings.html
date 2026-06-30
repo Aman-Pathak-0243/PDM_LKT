@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block heading %}Settings{% endblock %}
+{% block content %}
+<div class="section grid cols-2">
+  <div class="card">
+    <h3>Runtime configuration</h3>
+    <table>
+      <tr><td class="muted">App bind</td><td class="mono">{{ app_host }}:{{ app_port }}</td></tr>
+      <tr><td class="muted">Grafana base URL</td><td class="mono">{{ grafana_base }}</td></tr>
+      <tr><td class="muted">Storage backend</td><td><span class="badge badge-{{ backend }}">{{ backend }}</span></td></tr>
+      <tr><td class="muted">Default window</td><td class="mono">{{ default_window }}</td></tr>
+    </table>
+    <p class="muted" style="margin-top:12px">Secrets live in <span class="mono">.env</span> and are never displayed. Change configuration by editing <span class="mono">.env</span> and restarting the service.</p>
+  </div>
+  <div class="card">
+    <h3>Storage backend</h3>
+    <p class="muted">The active backend is <strong>{{ backend }}</strong>. MySQL is reachable but intentionally gated: it will not be used until permission is granted (set <span class="mono">STORAGE_BACKEND=mysql</span> and <span class="mono">MYSQL_CONFIRM=ENABLE</span>). The MySQL schema is designed in <span class="mono">db/schema.sql</span> and the datasets mirror it 1:1, so switching backends changes no application logic.</p>
+  </div>
+</div>
+<div class="section">
+  <div class="card">
+    <h3>LAN access</h3>
+    <p class="muted">The dashboard binds <span class="mono">{{ app_host }}:{{ app_port }}</span>. To reach it from another device on the same company subnet, allow the port through the host firewall (macOS: System Settings → Network → Firewall; Windows: inbound rule for the port) and browse to <span class="mono">http://&lt;host-ip&gt;:{{ app_port }}</span>.</p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,122 @@
+# =============================================================================
+# LIFT module — resolved panel mapping, thresholds, and error catalog.
+# Produced from live panel inspection + sampling on 2026-06-30 (SOP steps 3-5).
+# This file is the single source of the module's tunables; the Python loads it.
+# =============================================================================
+module: lift
+title: Lift PdM
+component_type: lift
+description: >-
+  Predictive maintenance for ASRS lifts (rotating, load-bearing). Health is
+  inferred from per-lift error events (rate, severity, recurrence, peer deviation)
+  with current-status and load context. No maintenance logbook is used.
+
+# Analysis window anchoring: the primary panel returns full history regardless of
+# from/to, so the model filters in-code and anchors "now" to the latest data
+# timestamp (as_of), making it work on live AND historical/frozen sources.
+default_window: now-30d        # operator-overridable via the dashboard duration control
+anchor_to_data_asof: true
+
+# ---- Data sources (resolved) ------------------------------------------------
+dashboards:
+  lift_error_history:          # PRIMARY
+    uid: wQds52G4z
+    env_key: LIFT__LIFT_ERROR_HISTORY
+    role: primary
+    db: lenskart_quadron (MySQL)
+    panels:
+      - id: 2
+        title: Lift Error History
+        role: primary
+        is_signal: true
+        fields: [lift_id, error_code, error_desc, created_time, updated_timestamp]
+        notes: Per-lift fault events. Returns full history; filter by window in code.
+
+  bad_tracker_diagnosis:       # SECONDARY (cross-relevant; current data)
+    uid: VAW2nmqIz
+    env_key: LIFT__BAD_TRACKER_DIAGNOSIS
+    role: secondary
+    db: lenskart_quadron (MSSQL)
+    panels:
+      - id: 2
+        title: Bad Tracker
+        role: secondary
+        is_signal: true
+        fields: [lift_id, lift_status, "lift Status Description", created_time, location]
+        notes: >-
+          Rows carry lift_id + lift status when a bad tracker is lift-associated.
+          Used for lift recurrence + current ERROR status. Other panels (#4 #6 #8 #10)
+          need lift/tracker/shuttle vars and are not used as signals.
+
+  lift_error_analysis:         # SECONDARY (load/throughput context)
+    uid: EqDhnQ9Sz
+    env_key: LIFT__LIFT_ERROR_ANALYSIS
+    role: secondary
+    db: lenskart_quadron (MSSQL)
+    panels:
+      - id: 2
+        title: Lift Level Task Creation Count
+        role: secondary
+        is_signal: false
+        fields: [Aisle, Front Inbound Lift, Front Outbound Lift, Back Inbound Lift, Back Outbound Lift]
+        notes: >-
+          Per-aisle cumulative task counts per lift position (load/wear proxy).
+          Front=lift_01, Back=lift_02. Used as relative load context only.
+
+# Candidates discovered but NOT usable this session (documented for the future):
+candidates_not_used:
+  - name: OPC - Lift Datalogger (uid SBaBnPb4z)
+    reason: 16 NCL panels returned no downloadable data in window (no CSV button); raw OPC tag telemetry — revisit with explicit time handling.
+  - name: Process - Lift (uid Z0Ls6L7Sk)
+    reason: xy-charts require var-date/var-shift; per-lift cycle-time/throughput/idle — high value once parameterised.
+  - name: Lift_Supply_Tote (uid lPsUfQ4Ska)
+    reason: requires var-date/var-shift/var-station_type; load/throughput stress feature.
+  - name: Lift Error-time Graph (uid R25cf1RHz)
+    reason: requires var-year/var-month; monthly error-time per lift.
+
+# Cross-module corrections (propagated to the mapping markdown):
+cross_module_notes:
+  - QUADRON CYCLES (8dDcXomVz) is SHUTTLE cycles (shuttle_id, PUTAWAY/PICKING/RESHUFFLING) — reassigned to the Shuttle module, NOT a lift source.
+  - QUADRON ERROR HISTORY (K2QzauWVz) is SHUTTLE errors (shuttle_id, error_type) — reassigned to the Shuttle module, NOT a lift source.
+  - Bad Tracker Diagnosis also exposes shuttle_id/tracker columns relevant to Shuttle + Tracker modules.
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5     # >= this many prior snapshots -> 'trend' regime
+  tiers:                            # health-score cut points (shared default shape)
+    ok: 85
+    watch: 65
+    warn: 40
+  penalties:                        # weights and caps (points off a 100 baseline)
+    rate_peer_z:   {weight: 9.0,  cap: 40}   # per unit robust z of error-rate vs peers
+    abs_rate:      {weight: 2.0,  cap: 20}   # per error/day absolute
+    severity:      {weight: 30.0, cap: 30}   # mean per-error severity (0..1) scaled
+    mechanical:    {weight: 22.0, cap: 22}   # share of mechanical-wear errors (0..1)
+    recurrence:    {weight: 1.5,  cap: 18}   # repeats of the same code beyond 2
+    diversity:     {weight: 2.0,  cap: 12}   # distinct error codes beyond 2
+    current_error: {weight: 12.0, cap: 12}   # lift currently in ERROR (bad tracker)
+  confidence:
+    min_errors_full: 30               # >= this many errors in window -> data-sufficient
+    coldstart_base: 0.35
+    trend_base: 0.7
+
+# ---- Error code catalog (code -> category + severity 0..1) -------------------
+# Severity drives the penalty + RCA. Mechanical-wear categories are the strongest
+# maintenance predictors; communication codes also feed the future Network module.
+mechanical_categories: [mechanical_wear, drive_motor, mechanical, safety_limit]
+error_catalog:
+  1:  {desc: "Lift axis error", category: mechanical, severity: 0.85}
+  3:  {desc: "Drive ethercat communication error", category: drive_comm, severity: 0.70}
+  4:  {desc: "Ethernet communication error", category: communication, severity: 0.50}
+  5:  {desc: "Lift brake has tear out or Belt got slipped", category: mechanical_wear, severity: 1.00}
+  8:  {desc: "Bins crossed carriage end limit (Overhang sensors cut)", category: sensor, severity: 0.60}
+  10: {desc: "Carriage zone 1 roller is faulty", category: mechanical_wear, severity: 0.80}
+  11: {desc: "Carriage zone 2 roller is faulty", category: mechanical_wear, severity: 0.80}
+  12: {desc: "Lift task timeout", category: performance, severity: 0.50}
+  13: {desc: "Lift crossed barcode software limit", category: positioning, severity: 0.50}
+  14: {desc: "Lift Motor has exceeded software limit", category: drive_motor, severity: 0.90}
+  16: {desc: "Lift crossed bottom hardware limit", category: safety_limit, severity: 0.90}
+  17: {desc: "Lift carriage sensors are faulty", category: sensor, severity: 0.70}
+  18: {desc: "Bin already present inside carriage", category: handling, severity: 0.30}
+default_severity: 0.5
+default_category: other

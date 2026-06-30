@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block heading %}Plugin Management{% endblock %}
+{% block content %}
+<div class="section">
+  <h3>Registered modules</h3>
+  <p class="muted">Each module is a self-registering plugin. Configured = dashboard URLs present in .env. Adding a module never edits core/.</p>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Title</th><th>Component</th><th>Configured</th><th>Signal/Panels</th><th>Last run</th></tr></thead>
+      <tbody id="plugins"><tr><td colspan="6" class="empty">loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<div class="section">
+  <h3>Panel catalog (Chapter 2 twin)</h3>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>Module</th><th>Dashboard</th><th>Panel</th><th>Type</th><th>Signal</th><th>Role</th></tr></thead>
+      <tbody id="catalog"><tr><td colspan="6" class="empty">loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

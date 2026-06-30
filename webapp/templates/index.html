@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block heading %}System Overview{% endblock %}
+{% block content %}
+<div class="section">
+  <h3>Module health</h3>
+  <p class="muted" style="margin-top:-4px">One tile per registered PdM module. Worst-component status and last run. Click a tile for per-component detail.</p>
+  <div id="modules" class="grid cols-4">
+    {% for m in modules %}
+    <div class="card"><div class="tile-title">{{ m.title }}</div><div class="kpi-sub">loading…</div></div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

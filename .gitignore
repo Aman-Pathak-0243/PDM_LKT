@@ -1,0 +1,33 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Runtime data (CSV persistence store, fetched panel caches, archives)
+data/
+*.csv
+
+# Logs
+logs/
+*.log
+
+# Playwright
+.cache/
+playwright-report/
+
+# Node / vendored builds
+node_modules/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Project: never track the ignore file
+ignore.txt

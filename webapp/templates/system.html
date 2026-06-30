@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block heading %}System Status{% endblock %}
+{% block content %}
+<div class="section grid cols-4">
+  <div class="card"><div class="kpi-sub">Status</div><div class="kpi" id="sys-status">—</div></div>
+  <div class="card"><div class="kpi-sub">Storage backend</div><div class="kpi" id="sys-backend">—</div></div>
+  <div class="card"><div class="kpi-sub">Modules</div><div class="kpi" id="sys-modules">—</div></div>
+  <div class="card"><div class="kpi-sub">Store</div><div class="kpi" id="sys-store" style="font-size:16px">—</div></div>
+</div>
+<div class="section">
+  <h3>Performance metrics</h3>
+  <div class="grid cols-4">
+    <div class="card"><div class="kpi-sub">Total runs</div><div class="kpi" id="sys-runs">—</div></div>
+    <div class="card"><div class="kpi-sub">Failed runs</div><div class="kpi" id="sys-failed">—</div></div>
+    <div class="card"><div class="kpi-sub">Total triggers</div><div class="kpi" id="sys-triggers">—</div></div>
+    <div class="card"><div class="kpi-sub">Avg trigger</div><div class="kpi" id="sys-avg" style="font-size:18px">—</div></div>
+  </div>
+  <div class="grid cols-2" style="margin-top:16px">
+    <div class="card"><div class="kpi-sub">Last trigger duration</div><div class="kpi" id="sys-last" style="font-size:18px">—</div></div>
+    <div class="card"><div class="kpi-sub">Notes</div><div class="muted">MySQL is reachable but gated — store is CSV until permission is granted. Automation runs in-process. Healthcheck: <span class="mono">/api/health</span>.</div></div>
+  </div>
+</div>
+{% endblock %}

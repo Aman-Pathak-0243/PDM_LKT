@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block heading %}Automation{% endblock %}
+{% block content %}
+<div class="section">
+  <div class="card" style="margin-bottom:16px">
+    <h3>How automation works</h3>
+    <p class="muted" style="margin:0">Schedules run in the application process (APScheduler), <strong>independent of this dashboard</strong>. Configure a scope, save it, and close the browser — automation keeps running in the terminal. Only stopping the service halts it. Reopening the dashboard reconnects without interruption.</p>
+  </div>
+  <h3>Schedules</h3>
+  <div id="automation-rows" class="grid cols-2"><div class="card">loading…</div></div>
+</div>
+{% endblock %}

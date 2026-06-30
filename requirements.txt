@@ -1,0 +1,33 @@
+# Predictive Maintenance (PdM) System — Python dependencies
+# Python 3.11+ (developed/tested on 3.14). Install into .venv.
+
+# --- Config / env ---
+python-dotenv>=1.0.1
+
+# --- Grafana fetching ---
+playwright>=1.44.0          # Chromium login + CSV download (mandated by starter.md §2/§4)
+httpx>=0.27.0               # authenticated JSON API calls reusing the Playwright cookie
+
+# --- Web backend ---
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+jinja2>=3.1.3               # server-rendered templates (offline, LAN-only)
+python-multipart>=0.0.9    # form POSTs from the dashboard
+
+# --- Scheduling (automation, runs independent of the dashboard) ---
+APScheduler>=3.10.4
+
+# --- Data / modelling ---
+pandas>=2.2.0
+numpy>=1.26.0
+scikit-learn>=1.4.0
+
+# --- Storage abstraction ---
+# CSV backend is active now (env override: no MySQL until permission).
+# MySQL backend ships dormant behind a flag for when DB access is granted.
+SQLAlchemy>=2.0.29
+PyMySQL>=1.1.0
+openpyxl>=3.1.2            # Excel export for the Storage Management module
+
+# --- Models / validation ---
+pydantic>=2.6.0

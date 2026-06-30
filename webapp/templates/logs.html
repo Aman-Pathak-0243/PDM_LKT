@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block heading %}Logs &amp; Events{% endblock %}
+{% block content %}
+<div class="section">
+  <div class="card" style="margin-bottom:12px">
+    <div class="form-grid">
+      <label class="field">Search<input id="log-q" placeholder="event / detail / source"></label>
+      <label class="field">Level<select id="log-level"><option value="">any</option><option>INFO</option><option>WARNING</option><option>ERROR</option></select></label>
+      <label class="field">Module<input id="log-mod" placeholder="e.g. lift"></label>
+      <label class="field">Since (hours)<input id="log-since" type="number" min="0" placeholder="0 = all"></label>
+      <button class="btn btn-sm btn-primary" onclick="PdM.searchLogs()">Search</button>
+    </div>
+  </div>
+  <div class="card table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>Level</th><th>Source</th><th>Event</th><th class="wrap">Detail</th></tr></thead>
+      <tbody id="logs"><tr><td colspan="5" class="empty">loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

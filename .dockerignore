@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.git/
+data/
+logs/
+*.log
+.env
+node_modules/
+.pytest_cache/
+.mypy_cache/
+ignore.txt
