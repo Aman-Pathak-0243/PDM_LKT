@@ -9,6 +9,10 @@
       <button class="btn btn-sm btn-primary" onclick="PdM.runNow('{{ module_name }}')">Run {{ module_name }} now</button>
     </div>
     <p class="muted">Health 0–100, risk tier, predicted time-to-maintenance, confidence, and regime. Click a row for RCA + health trend.</p>
+    <details class="card" id="methodology" style="margin-bottom:16px">
+      <summary style="cursor:pointer;font-weight:600">Methodology — how each {{ module_name }} verdict &amp; the module status are computed</summary>
+      <div id="methodology-body" class="muted" style="margin-top:12px">loading…</div>
+    </details>
     <div class="card table-wrap">
       <table>
         <thead><tr><th>Component</th><th>Health</th><th>Tier</th><th>Regime</th><th>TTM</th><th>Conf.</th><th class="wrap">Primary cause</th></tr></thead>

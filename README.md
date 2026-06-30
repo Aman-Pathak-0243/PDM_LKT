@@ -6,9 +6,9 @@ plant. It learns equipment health **purely from Grafana operational + error data
 maintenance with a confidence + regime, and explains *why* — all on a local/LAN web
 dashboard with terminal-resident automation.
 
-Built **one module per session**. **Module 1: Lift** is complete. See
-[`pdm_notebook.md`](pdm_notebook.md) for the full book and
-[`CLAUDE.md`](CLAUDE.md) for durable conventions.
+Built **one module per session**. **Module 1: Lift** and **Module 2: Shuttle**
+(cycles-based RUL) are complete. See [`pdm_notebook.md`](pdm_notebook.md) for the full
+book and [`CLAUDE.md`](CLAUDE.md) for durable conventions.
 
 ---
 
@@ -34,9 +34,10 @@ process. Open `http://<host-ip>:8800`.
 
 - **Overview** — one tile per module (worst-component status, last run). Pick a
   **window** (top-right) and **Run PdM (all)**, or run a single module from its tile.
-- **Per-module page** (`/module/lift`) — per-component health, risk tier, predicted
-  time-to-maintenance, confidence, regime; click a row for RCA + health trend; optional
-  "Mark maintenance done".
+- **Per-module page** (`/module/lift`, `/module/shuttle`) — per-component health, risk
+  tier, predicted time-to-maintenance, confidence, regime; click a row for RCA + health
+  trend; optional "Mark maintenance done". Each page has an in-page **Methodology** section
+  explaining how a component's verdict and the module's overall status are computed.
 - **PdM Triggers** — every manual + automated run, fully traceable (id, type, status,
   window, duration, counts).
 - **Automation** — enable/disable per scope (`global` or a module), set interval +

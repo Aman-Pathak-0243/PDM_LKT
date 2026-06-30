@@ -140,6 +140,11 @@ discovers modules from the registry.
 7. **Build health** (`health.py`) — per-component score, risk tier, predicted
    time-to-maintenance, confidence, prediction regime. Document the formula.
 8. **Build RCA** (`rca.py`) — dominant contributing signals per flagged component.
+8b. **Methodology (required)** — give the module class a `methodology` dict (summary,
+   `signals`, `entity_verdict` steps, `formulas`). It is served at
+   `/api/modules/<name>/methodology` (merged with the shared overall-status rollup in
+   `core/registry.py`) and rendered as an in-page "Methodology" section, so the page
+   itself explains how each component's verdict AND the module's overall status are reached.
 9. **Persist** — a PdM run writes `pdm_run` + per-component `component_health`
    rows (to CSV now; same schema as `db/schema.sql`).
 10. **Wire into webapp** — register module; add its module page; surface on main dashboard.

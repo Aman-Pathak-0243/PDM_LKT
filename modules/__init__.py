@@ -13,7 +13,8 @@ log = get_logger("modules")
 
 # --- registered modules (import to self-register) --------------------------- #
 from modules import lift  # noqa: E402,F401
+from modules import shuttle  # noqa: E402,F401
 
-# from modules import shuttle   # next session
+# from modules import conveyor   # next session
 
-__all__ = ["lift"]
+__all__ = ["lift", "shuttle"]

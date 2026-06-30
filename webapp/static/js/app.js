@@ -98,9 +98,32 @@
     });
   }
 
+  async function renderMethodology(name) {
+    const box = $("#methodology-body"); if (!box) return;
+    try {
+      const m = await api(`/api/modules/${name}/methodology`);
+      const list = (arr) => `<ol>${(arr || []).map((x) => `<li>${x}</li>`).join("")}</ol>`;
+      const signals = (m.signals || []).map((s) =>
+        `<tr><td><strong>${s.name}</strong></td><td class="muted">${s.source}</td><td>${s.what}</td></tr>`).join("");
+      const formulas = (m.formulas || []).map((f) =>
+        `<span class="pill mono">${f.name} = ${f.formula}</span>`).join(" ");
+      const os = m.overall_status || {};
+      box.innerHTML = `
+        <p>${m.summary || m.description || ""}</p>
+        <h3>Signals used</h3>
+        <div class="table-wrap"><table><thead><tr><th>Signal</th><th>Source</th><th>What it tells us</th></tr></thead><tbody>${signals}</tbody></table></div>
+        <h3 style="margin-top:14px">How a single ${m.component_type}'s status is reached</h3>
+        ${list(m.entity_verdict)}
+        ${formulas ? `<div class="tier-counts">${formulas}</div>` : ""}
+        <h3 style="margin-top:14px">How the overall module status is reached</h3>
+        <p>${os.summary || ""}</p>${list(os.rules)}`;
+    } catch (e) { box.textContent = "methodology unavailable: " + e.message; }
+  }
+
   async function initModule() {
     const rootEl = $("#module-root"); if (!rootEl) return;
     const name = rootEl.dataset.module;
+    renderMethodology(name);
     const comps = await api(`/api/modules/${name}/components`);
     const body = $("#components");
     body.innerHTML = "";

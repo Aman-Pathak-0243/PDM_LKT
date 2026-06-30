@@ -10,18 +10,21 @@ Scope: Equipment-health modules only. Inventory/order/decant-putaway dashboards 
 
 ---
 
-## 1. Shuttle Health PdM
-**Sub-component:** ASRS shuttles (rotating, high-cycle asset)
+## 1. Shuttle Health PdM  ✅ BUILT (Session 2) — RESOLVED BY LIVE INSPECTION
+**Sub-component:** ASRS shuttles (rotating, high-cycle asset). Roster = **124 units**
+(`QD_Shuttle_<aisle>_<unit>`), taken from QUADRON CYCLES.
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | Daily Shuttle Errors | Maintenance | Per-shuttle error events & codes |
-| Primary | QUADRON CYCLES (`8dDcXomVz`) | Maintenance | Per-shuttle cycles `shuttle_id, PUTAWAY, PICKING, RESHUFFLING` (wear proxy / RUL basis) — *confirmed shuttle in Session 1* |
-| Primary | QUADRON ERROR HISTORY (`K2QzauWVz`) | Quadron | Per-shuttle errors `shuttle_id, error_type, error_desc, created_time` — *confirmed shuttle in Session 1* |
-| Secondary | Quadron Alerts | Quadron | Active fault state |
+| Role | Dashboard | Folder | What it provides | Verified |
+|------|-----------|--------|------------------|----------|
+| Primary | QUADRON ERROR HISTORY (`K2QzauWVz`) | Quadron | Per-shuttle errors `shuttle_id, error_type, error_desc, created_time` (FORK/TELESCOPIC) | ✅ 94 rows |
+| Primary | QUADRON CYCLES (`8dDcXomVz`) | Maintenance | Per-shuttle cycles `PUTAWAY, PICKING, RESHUFFLING` (errors/Mcycle + RUL basis) | ✅ 124 shuttles |
+| Secondary | Daily Shuttle Errors (`N8QvGxQIk`) | Maintenance | Current aggregated `error_desc -> shuttle (n)` | ✅ panel #2 |
+| Secondary | Bad Tracker (`VAW2nmqIz`) | Maintenance | Current `shuttle_id` recurrence + `SHUTTLE_PICK_ERROR` | ✅ 76 rows |
+| Secondary | Quadron Alerts (`VxY5Zls7z`) | Quadron | Current free-text active alerts (shuttle mentions) | ✅ panel #2 |
 
-**Signal type:** Error-rate trend vs cycles-to-failure → MTBF / Remaining Useful Life.
-**Build priority:** **1 (highest)** — richest cycle-vs-error data. *(Note: this project builds Lift first per the kickoff; Shuttle is the next session.)*
+**Signal type:** errors normalised by cycles (errors/Mcycle) + severity/recurrence/peer + cycles-based RUL.
+**Build priority:** **1 (highest)** — richest cycle-vs-error data. Implemented in `modules/shuttle/`.
+*(This project built Lift first per the kickoff; Shuttle is Module 2. Quadron Alerts' buffer/lane/outbound panels are candidates for a future Buffer/Outbound module.)*
 
 ---
 

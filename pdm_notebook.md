@@ -23,8 +23,8 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 | # | Module | Chapter | Status |
 |---|--------|---------|--------|
 | 1 | Lift | [modules/lift/README.md](modules/lift/README.md) | ✅ built (Session 1) |
-| 2 | Shuttle | _next session_ | ⏳ planned (sources confirmed: QUADRON CYCLES, QUADRON ERROR HISTORY) |
-| 3 | Conveyor | — | planned |
+| 2 | Shuttle | [modules/shuttle/README.md](modules/shuttle/README.md) | ✅ built (Session 2) — cycles-based RUL |
+| 3 | Conveyor | _next session_ | ⏳ planned (Conveyor Zone Count, Discrepancy Report Events, GTP HOLD/TRANSIT) |
 | 4 | Tracker / Position-Sensor | — | planned |
 | 5 | Gate | — | planned |
 | 6 | Bin / Tote Mechanical | — | planned |

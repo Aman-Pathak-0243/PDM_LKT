@@ -122,3 +122,53 @@ def test_lift_features_and_scoring():
     assert bad_c.prediction_regime == "coldstart"
     assert "14" in bad_c.rca["error_mix"]
     assert comps[0].component_id == "aisle_01_inbound_lift_02"  # sorted worst-first
+
+
+# --------------------------- shuttle model ------------------------------- #
+def _shuttle_bundle():
+    from core.registry import FetchBundle as FB
+    now = pd.Timestamp.now()
+    erows = []
+    for i in range(40):  # heavy fork faulter
+        erows.append({"shuttle_id": "QD_Shuttle_03_06", "error_type": "FORK_ERROR",
+                      "error_desc": "REAR_SIDE_RIGHT_FORK_DOWN_IS_FAULTY",
+                      "created_time": (now - pd.Timedelta(hours=i)).strftime("%Y-%m-%d %H:%M:%S"),
+                      "updated_timestamp": ""})
+    err = pd.DataFrame(erows)
+    cyc = pd.DataFrame([
+        {"shuttle_id": "QD_Shuttle_03_06", "PUTAWAY": 9000, "PICKING": 9000, "RESHUFFLING": 9000},
+        {"shuttle_id": "QD_Shuttle_05_04", "PUTAWAY": 24896, "PICKING": 26680, "RESHUFFLING": 28004},
+        {"shuttle_id": "QD_Shuttle_01_01", "PUTAWAY": 13000, "PICKING": 14000, "RESHUFFLING": 14000},
+    ])
+    return FB(frames={"errors": err, "cycles": cyc}, rows_fetched=len(err) + len(cyc),
+              panels=[], notes={"window": "now-30d"})
+
+
+def test_shuttle_cycles_normalisation_and_scoring():
+    from modules.shuttle.features import compute_features as scf
+    from modules.shuttle.health import score as ssc
+    feats = scf(_shuttle_bundle())
+    assert len(feats) == 3  # roster from cycles
+    bad = feats["QD_Shuttle_03_06"]
+    assert bad["error_count"] == 40 and bad["total_cycles"] == 27000
+    # errors per million cycles = 40/27000*1e6 ≈ 1481
+    assert 1400 < bad["errors_per_mcycle"] < 1600
+    assert bad["mechanical_share"] == 1.0 and bad["epc_peer_z"] > 1.0  # positive outlier (n=3 fixture)
+
+    comps = ssc(feats, _NoHistory())
+    by_id = {c.component_id: c for c in comps}
+    assert by_id["QD_Shuttle_03_06"].risk_tier == "critical"
+    assert by_id["QD_Shuttle_01_01"].risk_tier == "ok"        # no errors
+    assert comps[0].component_id == "QD_Shuttle_03_06"        # worst-first
+    assert "FORK" in (by_id["QD_Shuttle_03_06"].primary_cause or "")
+
+
+def test_methodology_doc_present_for_modules():
+    import modules  # registers lift + shuttle
+    from core.registry import all_modules, module_methodology
+    for m in all_modules():
+        md = module_methodology(m)
+        assert md["module"] == m.name
+        assert md["overall_status"]["rules"]          # shared rollup doc present
+        if m.name in ("lift", "shuttle"):
+            assert md["entity_verdict"] and md["signals"]  # module-specific content

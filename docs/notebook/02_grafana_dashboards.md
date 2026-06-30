@@ -67,4 +67,40 @@ Template var: `lift`. MSSQL, derived analytics.
 
 ---
 
+## Session 2 — SHUTTLE module
+
+Resolved + sampled 2026-06-30. Shuttle uniquely has **cycle** data, enabling
+usage-normalised faults and cycles-based RUL.
+
+### QUADRON ERROR HISTORY — `K2QzauWVz` (folder: Quadron) — **PRIMARY (errors)**
+Template vars: `From`, `To`.
+
+| Panel | id | type | Fields | Verdict |
+|-------|----|------|--------|---------|
+| Quadron Shuttle Errors | 2 | table | `shuttle_id, error_type, error_desc, created_time, updated_timestamp` | **PRIMARY.** 94 rows (frozen 2023-08-11), 4 shuttles; `FORK_ERROR` (fork up/down faulty) + `TELESCOPIC_ERROR` dominate. |
+
+### QUADRON CYCLES — `8dDcXomVz` (folder: Maintenance) — **PRIMARY (cycles / RUL)**
+Template vars: `startTime`, `endTime`.
+
+| Panel | id | type | Fields | Verdict |
+|-------|----|------|--------|---------|
+| Shuttle Cycles | 2 | table | `shuttle_id, PUTAWAY, PICKING, RESHUFFLING` | **PRIMARY.** 124 shuttles; cumulative cycles (TOTAL 11k–79k). Basis for errors/Mcycle + RUL. |
+| Shuttle date wise | 4 | table | date-wise breakdown | Not used (date pivot of the same data). |
+
+### Daily Shuttle Errors — `N8QvGxQIk` (folder: Maintenance) — **SECONDARY (current)**
+No vars. Panel #2 (MSSQL `string_agg`): `error_desc, Value` where `Value` = `shuttle_id (n),…`.
+Parsed to current per-shuttle error counts. Current snapshot (vs frozen error history).
+
+### Bad Tracker Diagnosis — `VAW2nmqIz` — **SECONDARY (current recurrence)**
+Panel #2 carries `shuttle_id` + `shuttle Status Description` (`SHUTTLE_PICK_ERROR`): 76 current
+rows → shuttle recurrence + current pick-error. (Also a lift source — Module 1.)
+
+### Quadron Alerts — `VxY5Zls7z` (folder: Quadron) — **SECONDARY (current alerts)**
+16 panels, mostly **operational** (buffers, lanes, outbound queue, containers) — *excluded*.
+Panel #2 "Quadron Alerts" (`message`) carries free-text active alerts; shuttle mentions parsed
+to a current-alert flag. The buffer/lane/outbound panels are candidates for a future
+Buffer/Outbound module.
+
+---
+
 *(Subsequent sessions append their module's dashboard sections here.)*

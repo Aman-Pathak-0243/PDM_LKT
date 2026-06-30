@@ -50,4 +50,32 @@ sizes/record-counts/growth, and supports **archive** (move old rows to
 moved to MySQL, the same row counts apply and the `(module, component_id, created_at)`
 index keeps trend queries fast.
 
+## Fetch volume — SHUTTLE sources (sampled 2026-06-30)
+
+| Dashboard / panel | Rows fetched | Notes |
+|-------------------|-------------:|-------|
+| QUADRON ERROR HISTORY `#2` | ~94 | Frozen (2023-08-11), 4 shuttles faulting. |
+| QUADRON CYCLES `#2` | **124** | One row per shuttle (cumulative cycles). The roster. |
+| Daily Shuttle Errors `#2` | ~16 | Current aggregated error descriptions. |
+| Bad Tracker `#2` | ~76 (shuttle rows) | Current shuttle recurrence / pick errors. |
+| Quadron Alerts `#2` | ~11 | Current free-text alerts. |
+
+A full shuttle fetch pulls ≈ **320–350 rows** in ~20–35 s.
+
+## Write footprint — per PdM run (SHUTTLE)
+
+`component_health` dominates: **124 rows/run** (one per shuttle), ≈ 200–280 KB/run
+(rca_json + metrics_json incl. cycles). Plus 1 `pdm_run`, 1 `trigger_log`, 5
+`panel_catalog` upserts, ~1–2 `event_log`.
+
+| Automation interval | component_health rows/day (shuttle) | growth/day | per year |
+|---------------------|-----------:|-----------:|---------:|
+| hourly | 124 × 24 = 2,976 | ~5 MB | ~1.8 GB |
+| every 15 min | 11,904 | ~20 MB | ~7 GB |
+
+Shuttle is the largest per-run writer so far (124 components). Combined with Lift (16),
+hourly automation writes ≈ 3,360 `component_health` rows/day. Still fine for the CSV store;
+the Storage page's archive/delete-by-range caps footprint, and the
+`(module, component_id, created_at)` index keeps trend/RUL queries fast under MySQL later.
+
 *(Subsequent sessions append their module's fetch volumes + write footprint here.)*

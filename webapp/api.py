@@ -90,6 +90,16 @@ def modules():
     return services.module_summaries()
 
 
+@router.get("/modules/{name}/methodology")
+def module_methodology(name: str):
+    from core.registry import all_modules, module_methodology as _mm
+
+    mod = next((m for m in all_modules() if m.name == name), None)
+    if not mod:
+        raise HTTPException(404, "module not found")
+    return _mm(mod)
+
+
 @router.get("/modules/{name}/components")
 def module_components(name: str):
     return services.latest_components(name)

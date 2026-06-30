@@ -113,7 +113,40 @@ signal agreement (do independent signals point the same way?). It is reported so
 maintainer can triage: a `critical` tier at 0.9 confidence is actionable now; the
 same tier at 0.3 confidence means "watch and let history accumulate."
 
-## 9. Scalability and consistency
+## 9. From component verdict to module verdict (the overall status)
+
+Each module reports two levels, and the dashboard makes both explicit:
+
+1. **Per-component verdict** — the table on the module page: every physical unit's
+   score, tier, predicted time-to-maintenance, confidence, regime, and RCA (§2–§8).
+2. **Module overall status** — the tile on the overview page. It is the **worst risk
+   tier among the module's components**, ordered `critical > warn > watch > ok`. One
+   critical unit makes the whole module read *critical*, so the most urgent problem
+   surfaces first; the tile also shows the count of components in each tier and the
+   last-run time, and the per-component table shows the full picture (sorted worst-first).
+
+This rollup is identical for every module — defined once in `core/registry.py`
+(`worst_tier`, `MODULE_STATUS_DOC`) and surfaced per module via
+`/api/modules/<name>/methodology`, which the module page renders as an in-page
+"Methodology" section. So a maintainer can read, on the page itself, exactly how a
+unit's status and the module's status were computed.
+
+## 10. Cycles-based RUL (for cycle-bearing modules)
+
+Modules whose assets expose a **cycle counter** (e.g. Shuttle: PUTAWAY+PICKING+RESHUFFLING)
+get a sharper RUL than time-only modules:
+
+- Faults are normalised by usage — **errors per million cycles** — so a heavily used unit
+  is judged fairly against its workload (not penalised merely for being busy).
+- In the **trend** regime, health is fit against *cumulative cycles* to get
+  `cycles_to_threshold`; the recent **cycle-accrual rate** (Δcycles/Δtime across snapshots)
+  converts that to a time-to-maintenance. Both `predicted_ttm_cycles` and
+  `predicted_ttm_hours` are stored.
+- Time-only modules (e.g. Lift, which has no cycle counter) instead normalise by active
+  time and project the health trajectory against time. The regime label and confidence make
+  the basis explicit either way.
+
+## 11. Scalability and consistency
 
 - Scoring helpers (tiers, normalisation) live in `core/registry.py` so all modules
   share one methodology.

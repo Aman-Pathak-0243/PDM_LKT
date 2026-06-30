@@ -95,6 +95,9 @@ class PdMModule(ABC):
     title: str = "Base Module"
     component_type: str = "component"
     description: str = ""
+    # Structured explanation of how this module reaches its verdicts (rendered on
+    # the module page + served via the API). See modules/<name>/__init__.py.
+    methodology: Dict[str, Any] = {}
 
     # ---- configuration ---------------------------------------------------- #
     def dashboards(self, cfg: Optional[Config] = None) -> Dict[str, str]:
@@ -151,3 +154,35 @@ def all_modules() -> List[PdMModule]:
 
 def module_names() -> List[str]:
     return list(_REGISTRY.keys())
+
+
+# How a module's OVERALL status is derived — identical mechanism for every module,
+# so it is documented once here and merged into each module's methodology.
+MODULE_STATUS_DOC: Dict[str, Any] = {
+    "summary": (
+        "A module's overall status is the worst risk tier among its components — one "
+        "bad unit makes the whole module's tile show that tier. This surfaces the most "
+        "urgent problem first while the per-component table shows the full picture."
+    ),
+    "rules": [
+        "Module tier = worst component tier, ordered critical > warn > watch > ok.",
+        "The tile shows the worst tier, how many components sit in each tier, and the last-run time.",
+        "Component tier from health score: ok ≥ 85, watch 65–85, warn 40–65, critical < 40.",
+        "Health is a penalty model: start at 100 and subtract capped penalties per unhealthy signal.",
+        "Every prediction is labelled coldstart or trend and carries a confidence (0–1); the store "
+        "accumulates a longitudinal history so confidence and trend-based RUL improve over time.",
+    ],
+}
+
+
+def module_methodology(module: PdMModule) -> Dict[str, Any]:
+    """Combine a module's own methodology with the shared overall-status doc."""
+    md: Dict[str, Any] = dict(getattr(module, "methodology", {}) or {})
+    md.update({
+        "module": module.name,
+        "title": module.title,
+        "component_type": module.component_type,
+        "description": module.description,
+        "overall_status": MODULE_STATUS_DOC,
+    })
+    return md

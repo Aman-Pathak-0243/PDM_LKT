@@ -1,0 +1,127 @@
+# =============================================================================
+# SHUTTLE module — resolved panel mapping, thresholds, and error catalog.
+# Produced from live inspection + sampling on 2026-06-30 (SOP steps 3-5).
+# The Shuttle has CYCLE data (unlike Lift): the model normalises faults by usage
+# (errors per million cycles) and supports a cycles-based RUL once history exists.
+# =============================================================================
+module: shuttle
+title: Shuttle PdM
+component_type: shuttle
+description: >-
+  Predictive maintenance for ASRS shuttles (rotating, high-cycle telescopic-fork
+  assets). Health is inferred from per-shuttle errors normalised by accumulated
+  cycles (errors/Mcycle), error severity, recurrence, peer deviation, reshuffle
+  load, and current status. No maintenance logbook is used.
+
+default_window: now-30d
+anchor_to_data_asof: true        # anchor the error window to max(created_time)
+
+# ---- Data sources (resolved) ------------------------------------------------
+dashboards:
+  quadron_error_history:          # PRIMARY (errors)
+    uid: K2QzauWVz
+    env_key: SHUTTLE__QUADRON_ERROR_HISTORY
+    role: primary
+    db: lenskart_quadron (MySQL)
+    panels:
+      - id: 2
+        title: Quadron Shuttle Errors
+        role: primary
+        is_signal: true
+        fields: [shuttle_id, error_type, error_desc, created_time, updated_timestamp]
+        notes: Per-shuttle fault events (FORK_ERROR / TELESCOPIC_ERROR dominate).
+
+  quadron_cycles:                 # PRIMARY (cycles = wear / RUL basis)
+    uid: 8dDcXomVz
+    env_key: SHUTTLE__QUADRON_CYCLES
+    role: primary
+    db: lenskart_quadron (MySQL)
+    panels:
+      - id: 2
+        title: Shuttle Cycles
+        role: primary
+        is_signal: true
+        fields: [shuttle_id, PUTAWAY, PICKING, RESHUFFLING]
+        notes: Cumulative cycles per shuttle (124 units). TOTAL = sum; reshuffle_share = RESHUFFLING/TOTAL.
+
+  daily_shuttle_errors:           # SECONDARY (current aggregated errors)
+    uid: N8QvGxQIk
+    env_key: SHUTTLE__DAILY_SHUTTLE_ERRORS
+    role: secondary
+    db: lenskart_quadron (MSSQL)
+    panels:
+      - id: 2
+        title: Daily Shuttle Errors
+        role: secondary
+        is_signal: true
+        fields: [error_desc, Value]
+        notes: "Value = 'shuttle_id (n),...' — parsed to current per-shuttle error counts."
+
+  bad_tracker_diagnosis:          # SECONDARY (current recurrence + status)
+    uid: VAW2nmqIz
+    env_key: SHUTTLE__BAD_TRACKER_DIAGNOSIS
+    role: secondary
+    db: lenskart_quadron (MSSQL)
+    panels:
+      - id: 2
+        title: Bad Tracker
+        role: secondary
+        is_signal: true
+        fields: [shuttle_id, "shuttle Status Description", task_type, status, created_time]
+        notes: 76 current rows carry shuttle_id + SHUTTLE_PICK_ERROR status.
+
+  quadron_alerts:                 # SECONDARY (current free-text alerts)
+    uid: VxY5Zls7z
+    env_key: SHUTTLE__QUADRON_ALERTS
+    role: secondary
+    db: lenskart_quadron (MSSQL)
+    panels:
+      - id: 2
+        title: Quadron Alerts
+        role: secondary
+        is_signal: true
+        fields: [message]
+        notes: Free-text active alerts; shuttle_id mentions parsed to a current-alert flag.
+
+cross_module_notes:
+  - Quadron Alerts also carries buffer/lane/outbound operational panels (not shuttle health) -> candidates for a future Buffer/Outbound module.
+  - Bad Tracker also exposes lift_id (Lift module) and tracker columns (Tracker module).
+  - Roster note: cycles list 124 shuttle units (QD_Shuttle_<aisle>_<unit>); richer than Chapter 1's simplified "one shuttle per aisle" — documented in the README.
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5
+  tiers: {ok: 85, watch: 65, warn: 40}
+  penalties:                          # weight · cap (points off 100)
+    epc_peer_z:        {weight: 6.0,  cap: 36}   # robust z of errors/Mcycle vs fleet
+    epc_abs:           {weight: 0.02, cap: 18}   # per error/Mcycle absolute
+    severity:          {weight: 28.0, cap: 28}   # mean error severity (0..1)
+    mechanical:        {weight: 20.0, cap: 20}   # mechanical-wear error share
+    recurrence:        {weight: 1.5,  cap: 16}   # repeats of same error_desc beyond 2
+    diversity:         {weight: 2.0,  cap: 10}   # distinct error types beyond 2
+    reshuffle_excess:  {weight: 18.0, cap: 8}    # reshuffle_share above fleet median
+    current_badtracker: {weight: 4.0, cap: 16}   # per current bad-tracker event
+    current_alert:     {weight: 8.0,  cap: 8}    # currently named in an active alert
+    current_daily:     {weight: 3.0,  cap: 9}    # per current daily-error event
+  confidence:
+    min_errors_full: 20
+    coldstart_base: 0.4               # higher than lift: cycles give usage context even with no errors
+    trend_base: 0.72
+
+# ---- Error catalog: by error_type, with error_desc keyword refinements -------
+mechanical_categories: [mechanical_wear, drive_motor, mechanical]
+error_catalog:
+  FORK_ERROR:       {category: mechanical_wear, severity: 0.90}   # fork up/down actuator/sensor wear
+  TELESCOPIC_ERROR: {category: mechanical,      severity: 0.80}   # telescope positioning/drive
+  PICK_ERROR:       {category: handling,        severity: 0.60}
+  SHUTTLE_PICK_ERROR: {category: handling,      severity: 0.60}
+# error_desc keyword overrides (checked in order; first match wins):
+desc_overrides:
+  - {match: SERVO_DRIVE,  category: drive_motor, severity: 0.90}
+  - {match: SENSOR,       category: sensor,      severity: 0.60}
+  - {match: DETECTION,    category: sensor,      severity: 0.60}
+  - {match: NOT_AT_CENTER, category: positioning, severity: 0.65}
+  - {match: NOT_AT_CENTRE, category: positioning, severity: 0.65}
+  - {match: FORK,         category: mechanical_wear, severity: 0.90}
+default_severity: 0.55
+default_category: other
