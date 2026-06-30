@@ -129,4 +129,36 @@ GTP Station + Scanner module (Module 7).** Grafana exposes no discrete conveyor 
 
 ---
 
+## Session 4 — TRACKER / Position-Sensor module
+
+Resolved + sampled 2026-06-30. **Anomaly/recurrence** module — the component is the
+grid **`location`** (the fixed position sensor / tracker reader), not the per-tote
+tracker tag. **Two corrections to the kickoff/mapping** (below).
+
+### Bad Tracker Diagnosis — `VAW2nmqIz` (folder: Maintenance) — **PRIMARY**
+Template vars: `lift`, `tracker`, `shuttle`. MSSQL `lenskart_quadron`.
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Bad Tracker | 2 | table | `tracker, container, location, created_time, shuttle_id, task_type, status (8=PICK_ERROR), shuttle Status Description, lift_id, lift_status (2=ERROR), lift Status Description, Last Possible Tracker Location/Timestamp` | **PRIMARY signal.** Current set of mislocated totes. **Current-state** (same 86 rows at `now-2d` and `now-90d`; window not server-filtered). `tracker` is a per-tote tag (86 distinct in 86 rows, **no recurrence**); `location` (uniform `aisle_NN_bt_NN`) **clusters** — `aisle_03_bt_10` had 5, `aisle_04_bt_5` had 4. → component = location. |
+| Total BT Totes | 4 | stat | `Value` (=85) | Context scalar (count of bad-tracker totes). |
+| Tracker Journrey | 8 | table | needs `${tracker}`: `tracker, source, destination, create_timestamp` from `tracker_history` | **Drill-down**, not a population signal. Future RCA enrichment for a flagged location's worst tracker. |
+| latest Lift Tasks WithIn Given TimeRange | 6 | table | needs `${lift}` | Per-lift drill-down (cross-module). Not a tracker signal. |
+| Latest Shuttle Commands WithIn Given TimeRange | 10 | table | needs `${shuttle}` | Per-shuttle drill-down (cross-module). Not a tracker signal. |
+
+**Correction 1 (kickoff):** the component is **not** the `tracker` ID. A tracker is a
+mobile per-tote tag with no within-snapshot recurrence; the recurring/degrading unit is
+the fixed grid `location` (position sensor). The model scores locations.
+
+### Aggregate Error Report — `DaVyCb9Hz` (folder: Maintenance) — **DROPPED (NOT a tracker source)**
+No template vars. Panel #2 SQL = `shuttle_error UNION lift_error` →
+`error_code, error_desc, error_type, robot_id, created_time, updated_timestamp, robotType, Site_name`.
+
+**Correction 2 (mapping):** the mapping listed this as the tracker secondary ("error
+clustering by location/tracker"). Live inspection shows **no tracker/location column** —
+it is a shuttle+lift error union keyed by `robot_id` (17,368 rows: 14,012 SHUTTLE +
+3,356 LIFT), already covered by the Shuttle + Lift modules. **Dropped as a tracker source.**
+
+---
+
 *(Subsequent sessions append their module's dashboard sections here.)*

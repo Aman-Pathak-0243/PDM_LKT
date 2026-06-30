@@ -99,4 +99,33 @@ Across all three modules, a single "Run all" writes ≈ **16 + 124 + 6 = 146** `
 rows. Hourly automation ≈ 3,500 rows/day — comfortably within the CSV store; archive/delete-by-range
 caps it.
 
+## Fetch volume — TRACKER sources (sampled 2026-06-30)
+
+| Dashboard / panel | Rows fetched | Notes |
+|-------------------|-------------:|-------|
+| Bad Tracker `#2` | **~85–86** | **Current-state** (identical at `now-2d` and `now-90d` — window not server-filtered). One row per mislocated tote. |
+| Total BT Totes `#4` | 1 | Scalar count context. |
+
+A full tracker fetch pulls ≈ **86 rows** in ~15–20 s (two light table panels; the
+template-var drill-downs `#8/#6/#10` are **not** fetched in the core run). The window
+governs the in-code recent-vs-stale split, not the fetch size.
+
+## Write footprint — per PdM run (TRACKER)
+
+`component_health` rows/run = **the number of currently-bad locations** (≈ 54 this
+snapshot), not a fixed roster — it shrinks/grows with the anomaly set. Each row ≈
+1.5–2 KB (rca_json carries the cluster + stuck tracker tags). Plus 1 `pdm_run`, 1
+`trigger_log`, 5 `panel_catalog` upserts, ~1–2 `event_log`.
+
+| Automation interval | component_health rows/day (tracker, ~54) | growth/day | per year |
+|---------------------|-----------:|-----------:|---------:|
+| hourly | 54 × 24 ≈ 1,296 | ~2.2 MB | ~0.8 GB |
+| every 15 min | ~5,184 | ~9 MB | ~3.2 GB |
+
+Tracker is the module whose store **most** rewards accumulation: recurrence across runs
+is its strongest signal, so its longitudinal history is doing predictive work the single
+2-day fetch cannot. Across all four modules a single "Run all" writes ≈ **16 + 124 + 6 +
+~54 = ~200** `component_health` rows; hourly automation ≈ 4,800 rows/day — still well
+within the CSV store, with archive/delete-by-range to cap footprint.
+
 *(Subsequent sessions append their module's fetch volumes + write footprint here.)*

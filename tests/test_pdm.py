@@ -195,12 +195,91 @@ def test_conveyor_congestion_and_scoring():
     assert "limit" in (by_id["zone_2"].primary_cause or "").lower()
 
 
+# --------------------------- tracker model ------------------------------- #
+def _tracker_bundle():
+    from core.registry import FetchBundle as FB
+    now = pd.Timestamp.now()
+
+    def row(loc, trk, shuttle, age_h, lift=None, lift_desc=None):
+        return {
+            "tracker": trk, "container": f"TL{trk}", "location": loc,
+            "created_time": (now - pd.Timedelta(hours=age_h)).strftime("%Y-%m-%d %H:%M:%S"),
+            "shuttle_id": shuttle, "task_type": "PICKING", "status": 8.0,
+            "shuttle Status Description": "SHUTTLE_PICK_ERROR" if shuttle else None,
+            "lift_id": lift, "lift_status": 2.0 if lift else None,
+            "lift Status Description": lift_desc,
+        }
+
+    rows = []
+    # Degrading position: a recent cluster of 4 mislocated totes, two distinct shuttles.
+    for i in range(4):
+        rows.append(row("aisle_03_bt_10", 1000 + i, "QD_Shuttle_03_10" if i < 3 else "QD_Shuttle_03_11", i + 1))
+    # Healthy position: a single long-stale (old) tote.
+    rows.append(row("aisle_05_bt_9", 2000, "QD_Shuttle_05_09", 24 * 300))
+    # A position with a lift in ERROR.
+    rows.append(row("aisle_04_bt_2", 3000, None, 2, lift="aisle_04_inbound_lift_02", lift_desc="ERROR"))
+    df = pd.DataFrame(rows)
+    return FB(frames={"bad_tracker": df}, rows_fetched=len(df), panels=[],
+              notes={"window": "now-7d", "total_bt_totes": len(df)})
+
+
+def test_tracker_clustering_and_scoring():
+    from modules.tracker.features import compute_features as tcf, _parse_window_days
+    from modules.tracker.health import score as tsc
+
+    assert _parse_window_days("now-7d") == 7
+    assert abs(_parse_window_days("now-12h") - 0.5) < 1e-9
+
+    feats = tcf(_tracker_bundle())
+    assert set(feats) == {"aisle_03_bt_10", "aisle_05_bt_9", "aisle_04_bt_2"}
+    bad = feats["aisle_03_bt_10"]
+    assert bad["bad_count"] == 4 and bad["recent_bad_count"] == 4
+    assert bad["distinct_shuttles"] == 2 and bad["aisle"] == "aisle_03"
+    assert bad["bad_count_peer_z"] > 0
+    assert feats["aisle_05_bt_9"]["recent_bad_count"] == 0   # long-stale single tote
+    assert feats["aisle_04_bt_2"]["lift_error_count"] == 1
+
+    comps = tsc(feats, _NoHistory())
+    by_id = {c.component_id: c for c in comps}
+    assert comps[0].component_id == "aisle_03_bt_10"          # worst-first
+    assert by_id["aisle_03_bt_10"].health_score < by_id["aisle_05_bt_9"].health_score
+    assert by_id["aisle_05_bt_9"].risk_tier == "ok"          # isolated stale tote
+    assert by_id["aisle_03_bt_10"].prediction_regime == "coldstart"
+    # Cross-module flags: one shuttle dominates the cluster -> shuttle; lift ERROR -> lift.
+    assert any(x["module"] == "shuttle" for x in by_id["aisle_03_bt_10"].rca["cross_module_flags"])
+    assert any(x["module"] == "lift" for x in by_id["aisle_04_bt_2"].rca["cross_module_flags"])
+
+
+def test_tracker_recurrence_lowers_health():
+    """Longitudinal store: a position flagged in prior runs scores worse (recurrence)."""
+    from modules.tracker.features import compute_features as tcf
+    from modules.tracker.health import score as tsc
+
+    class _Hist:
+        def __init__(self, n):
+            self._n = n
+
+        def component_history(self, module, component_id, limit=200):
+            if component_id == "aisle_03_bt_10":
+                return [{"created_at": now_iso(), "health_score": 50.0} for _ in range(self._n)]
+            return []
+
+        def run_count(self, module):
+            return self._n
+
+    feats = tcf(_tracker_bundle())
+    cold = {c.component_id: c for c in tsc(feats, _NoHistory())}
+    recur = {c.component_id: c for c in tsc(feats, _Hist(3))}
+    assert recur["aisle_03_bt_10"].health_score < cold["aisle_03_bt_10"].health_score
+    assert recur["aisle_03_bt_10"].metrics["recurrence_runs"] == 3
+
+
 def test_methodology_doc_present_for_modules():
-    import modules  # registers lift + shuttle
+    import modules  # registers lift + shuttle + conveyor + tracker
     from core.registry import all_modules, module_methodology
     for m in all_modules():
         md = module_methodology(m)
         assert md["module"] == m.name
         assert md["overall_status"]["rules"]          # shared rollup doc present
-        if m.name in ("lift", "shuttle"):
+        if m.name in ("lift", "shuttle", "conveyor", "tracker"):
             assert md["entity_verdict"] and md["signals"]  # module-specific content

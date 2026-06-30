@@ -63,16 +63,30 @@ Scope: Equipment-health modules only. Inventory/order/decant-putaway dashboards 
 
 ---
 
-## 4. Tracker / Position-Sensor PdM
-**Sub-component:** Grid position trackers
+## 4. Tracker / Position-Sensor PdM  ✅ BUILT (Session 4) — RESOLVED BY LIVE INSPECTION
+**Sub-component:** ASRS **grid position sensors / tracker readers** — the component is the
+grid **`location`** (`aisle_<NN>_bt_<NN>`), NOT the per-tote tracker tag. Universe = the
+locations currently exhibiting bad-tracker events (dynamic anomaly set, ~54 this snapshot).
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | Bad Tracker Diagnosis | Maintenance | Tracker fault diagnostics per ID |
-| Secondary | Aggregate Error Report | Maintenance | Error clustering by location/tracker |
+| Role | Dashboard | Folder | What it provides | Verified |
+|------|-----------|--------|------------------|----------|
+| Primary | Bad Tracker Diagnosis (`VAW2nmqIz`) | Maintenance | `#2` "Bad Tracker": current mislocated totes `tracker, container, location, created_time, shuttle_id, task_type, status, lift_id, …` → per-location cluster | ✅ 86 rows, current-state |
+| Context | Bad Tracker Diagnosis | Maintenance | `#4` "Total BT Totes" (scalar count) | ✅ 1 row |
+| Drill-down (not used) | Bad Tracker Diagnosis | Maintenance | `#8/#6/#10` need `${tracker}/${lift}/${shuttle}` (per-entity drill-downs) | ✅ documented |
 
-**Signal type:** Error clustering on specific tracker IDs → pre-failure warning (mislocated totes).
-**Build priority:** 4 — anomaly detection, quick win.
+**Signal type:** bad-tracker events **clustering** on the same grid location + **cross-run
+recurrence** (from the store) + recency + robot breadth + peer deviation → position-sensor
+pre-failure (mislocated totes). Implemented in `modules/tracker/`.
+
+> **CORRECTION 1 (Session 4 — kickoff):** the component is **not** the `tracker` ID. The
+> `tracker` field is a per-tote position tag (**86 distinct tags in 86 rows — no recurrence**),
+> whereas the grid `location` clusters (`aisle_03_bt_10`=5 stuck totes, `aisle_04_bt_5`=4) and
+> is the fixed unit that physically degrades. Component reassigned to **location (position sensor)**.
+>
+> **CORRECTION 2 (Session 4 — mapping):** the secondary **Aggregate Error Report** (`DaVyCb9Hz`)
+> was listed as "error clustering by location/tracker". Live SQL shows it is `shuttle_error UNION
+> lift_error` keyed by `robot_id` with **no tracker/location column** (17,368 rows: 14,012 SHUTTLE +
+> 3,356 LIFT) — already covered by the Shuttle + Lift modules. **Dropped as a tracker source.**
 
 ---
 

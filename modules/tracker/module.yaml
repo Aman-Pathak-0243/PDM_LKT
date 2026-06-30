@@ -1,0 +1,80 @@
+# =============================================================================
+# TRACKER / Position-Sensor module — resolved panel mapping + thresholds.
+# Produced from live inspection + sampling on 2026-06-30 (SOP steps 3-5).
+#
+# KEY FINDING (corrects the kickoff + mapping): the "Bad Tracker" panel's `tracker`
+# field is a per-tote position TAG (86 distinct trackers in 86 rows — zero recurrence
+# within a snapshot), NOT a fixed sensor. The recurring, physically-degrading unit is
+# the grid `location` (uniform shape `aisle_<NN>_bt_<NN>`) — i.e. the GRID POSITION
+# SENSOR / tracker reader installed at that cell. Bad-tracker events CLUSTER on the
+# same location (aisle_03_bt_10 had 5 stuck totes, aisle_04_bt_5 had 4), so the
+# component is the LOCATION. A location that repeatedly mislocates totes is pre-failing.
+#
+# The "Bad Tracker" panel is CURRENT-STATE (same 86 rows at now-2d and now-90d — the
+# dashboard window does not filter it). The 2-day-window limit is overcome by OUR store:
+# each PdM run snapshots the currently-bad locations, so recurrence/persistence accrue
+# over runs (CLAUDE.md §6). The `window` parameter here drives the recent-vs-stale split
+# applied in-code to `created_time`, not a server-side filter.
+#
+# Aggregate Error Report (DaVyCb9Hz) was the mapping's "secondary (error clustering by
+# location/tracker)" — live SQL shows it is `shuttle_error UNION lift_error` keyed by
+# robot_id with NO tracker/location column (14,012 SHUTTLE + 3,356 LIFT rows). It carries
+# no tracker signal and is already covered by the Shuttle + Lift modules -> dropped as a
+# tracker source (see cross_module_notes).
+# =============================================================================
+module: tracker
+title: Tracker / Position-Sensor PdM
+component_type: position_sensor
+description: >-
+  Predictive maintenance for ASRS grid position sensors / tracker readers. Health is
+  inferred from bad-tracker events that cluster on the same grid location (mislocated
+  totes) — cluster size, recency, breadth of affected robots, peer deviation, and
+  cross-run recurrence/persistence from the accumulated store. No maintenance logbook.
+
+default_window: now-7d           # recency split for created_time (panel is current-state)
+anchor_to_data_asof: true
+
+# ---- Data sources (resolved) ------------------------------------------------
+dashboards:
+  bad_tracker_diagnosis:          # PRIMARY (the only tracker signal source)
+    uid: VAW2nmqIz
+    env_key: TRACKER__BAD_TRACKER_DIAGNOSIS
+    role: primary
+    db: lenskart_quadron (MSSQL)
+    signal_panel: 2               # "Bad Tracker" table — current set of mislocated totes
+    # Panel #2 columns: tracker, container, location, created_time, shuttle_id, task_type,
+    #   status (8=SHUTTLE_PICK_ERROR), shuttle Status Description, lift_id, lift_status
+    #   (2=ERROR), lift Status Description, Last Possible Tracker Location/Timestamp.
+    context_panel: 4              # "Total BT Totes" stat (count of bad-tracker totes)
+    drilldown_panels:             # template-var panels — drill-downs, NOT population signals
+      8:  {var: tracker, title: "Tracker Journrey",  sql: tracker_history source/dest/timestamp}
+      6:  {var: lift,    title: "latest Lift Tasks WithIn Given TimeRange"}
+      10: {var: shuttle, title: "Latest Shuttle Commands WithIn Given TimeRange"}
+    notes: >-
+      #2 needs no template var (returns the full current bad-tracker set). #8/#6/#10 are
+      per-entity drill-downs requiring ${tracker}/${lift}/${shuttle}; documented as future
+      enrichment (RCA drill-down for a flagged location's worst tracker), not core signals.
+
+cross_module_notes:
+  - Aggregate Error Report (DaVyCb9Hz #2) is shuttle_error UNION lift_error keyed by robot_id (NO tracker/location) -> dropped as a tracker source; already covered by Shuttle + Lift modules.
+  - SHUTTLE_PICK_ERROR (status 8) on a bad-tracker row is a cross-feature to the Shuttle module when one shuttle dominates a recurring-bad location (could be shuttle positioning, e.g. NOT_AT_CENTRE).
+  - lift ERROR (status 2) on a bad-tracker row is a cross-feature to the Lift module.
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5
+  tiers: {ok: 85, watch: 65, warn: 40}
+  recent_days: 7                  # a stuck tote newer than this counts as "active"
+  status_pick_error: 8            # shuttle_command status meaning SHUTTLE_PICK_ERROR
+  status_lift_error: 2            # lift_command status meaning ERROR
+  penalties:                      # weight · cap (points off 100)
+    cluster:        {weight: 8.0,  cap: 34}   # per currently-stuck tote at this location
+    recent_cluster: {weight: 9.0,  cap: 30}   # per RECENT (active) stuck tote
+    recurrence:     {weight: 7.0,  cap: 30}   # per prior run this location appeared bad (longitudinal)
+    multi_shuttle:  {weight: 5.0,  cap: 15}   # per distinct shuttle beyond the first
+    lift_involved:  {weight: 6.0,  cap: 12}   # bad-tracker rows with a lift in ERROR
+    peer_z:         {weight: 5.0,  cap: 18}   # robust z of bad_count vs peer locations
+  confidence:
+    coldstart_base: 0.42
+    trend_base: 0.72
+  ttm_bands_hours: {critical: 48, warn: 240, watch: 720}
