@@ -26,7 +26,8 @@ def latest_components(module: str) -> List[Dict[str, Any]]:
     rows = storage.latest_per(
         "component_health", ["module", "component_id"], "created_at", {"module": module}
     )
-    rows.sort(key=lambda r: (tier_rank(r.get("risk_tier", "ok")), -(r.get("health_score") or 0)))
+    # Worst-first: worst tier first, then lowest health within a tier.
+    rows.sort(key=lambda r: (tier_rank(r.get("risk_tier", "ok")), (r.get("health_score") or 0)))
     return rows
 
 

@@ -103,4 +103,30 @@ Buffer/Outbound module.
 
 ---
 
+## Session 3 — CONVEYOR module
+
+Resolved + sampled 2026-06-30. Data is **live/current** (unlike the frozen Lift/Shuttle
+error logs). Component universe = **6 zones**.
+
+### Conveyor Zone Count — `lavIciTDk` (folder: GTP) — **PRIMARY (per-zone congestion)**
+No template vars. MSSQL `lenskart_gtp.dbo.conveyor_zone_count`.
+
+| Panel | id | type | Fields | Verdict |
+|-------|----|------|--------|---------|
+| Zone 1–6 | 6, 8, 10, 12, 14, 16 | timeseries | `time, Conveyor Actual, Conveyor Limit, Buffer Actual, Buffer Limit` (per `WHERE zone='N'`) | **PRIMARY.** Per-zone queue vs limit over time. 6k–17k samples/zone/day. All zones run ≈1.0–1.5× limit. |
+| Panel Title (snapshot) | 4 | table | `Last Updated, Zone ID, Conveyor (Actual/Limit), Buffer (Actual/Limit)` | Latest per-zone state (best-effort context). |
+
+### GTP (HOLD, TRANSIT) — `C8jMvAcIk` (folder: GTP) — **SECONDARY (flow stress)**
+No vars. Panel #2 `ON_HOLD Orders` (≈200 rows), #4 `Transit state` (≈180 rows): order/tray
+flow keyed by `station_id` (not zone). Used as module-level **counts** (`system_on_hold`,
+`system_in_transit`), not per-zone scoring.
+
+### Discrepancy Report Events — `D6sQle2Vz` (folder: GTP) — **REASSIGNED (NOT conveyor)**
+Panel #2 = `verification_events`: `station, operation_type, user, container, type, discrepancy_type,
+create_time` (≈17.8k current rows; values `EMPTY_SUPPLY_CONTAINER_CONFIRM`, `SHORT`, …). This is
+**GTP-station pick verification keyed by station**, not conveyor jams/zones. **Reassigned to the
+GTP Station + Scanner module (Module 7).** Grafana exposes no discrete conveyor jam-event feed.
+
+---
+
 *(Subsequent sessions append their module's dashboard sections here.)*

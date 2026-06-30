@@ -78,4 +78,25 @@ hourly automation writes ≈ 3,360 `component_health` rows/day. Still fine for t
 the Storage page's archive/delete-by-range caps footprint, and the
 `(module, component_id, created_at)` index keeps trend/RUL queries fast under MySQL later.
 
+## Fetch volume — CONVEYOR sources (sampled 2026-06-30)
+
+| Dashboard / panel | Rows fetched | Notes |
+|-------------------|-------------:|-------|
+| Conveyor Zone Count `#6/#8/#10/#12/#14/#16` | ~6k–17k **per zone** | Per-minute(ish) live samples; ~65k rows total for 6 zones over 24 h. |
+| GTP HOLD/TRANSIT `#2/#4` | ~200 + ~180 | Current on-hold / in-transit counts. |
+
+A full conveyor fetch pulls ≈ **65k rows** in ~30–60 s (the 6 heavy live timeseries
+dominate — the fetcher uses `domcontentloaded` + a generous Download-CSV wait to handle
+dashboards that never reach network-idle). The window is short by design (`now-24h`),
+which bounds this; a wider window scales the timeseries linearly.
+
+## Write footprint — per PdM run (CONVEYOR)
+
+Only **6 rows/run** in `component_health` (one per zone) — tiny, despite the large fetch.
+Plus 1 `pdm_run`, 1 `trigger_log`, up to 8 `panel_catalog` upserts, ~1–2 `event_log`.
+
+Across all three modules, a single "Run all" writes ≈ **16 + 124 + 6 = 146** `component_health`
+rows. Hourly automation ≈ 3,500 rows/day — comfortably within the CSV store; archive/delete-by-range
+caps it.
+
 *(Subsequent sessions append their module's fetch volumes + write footprint here.)*

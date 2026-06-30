@@ -1,0 +1,66 @@
+# =============================================================================
+# CONVEYOR module — resolved panel mapping + thresholds.
+# Produced from live inspection + sampling on 2026-06-30 (SOP steps 3-5).
+#
+# Finding: Grafana exposes NO discrete conveyor jam/misroute event source — the
+# mapping's "Discrepancy Report Events" is station pick-verification (verification_events:
+# station, operation_type, discrepancy_type) and was reassigned to the GTP Station module.
+# Conveyor health is therefore inferred from per-zone CONGESTION: how far each zone's
+# queue (conveyor_actual_count) runs above its limit (conveyor_limit_count), peak backups,
+# sustained severe saturation, and buffer fill — the observable symptom of belt/motor/
+# diverter wear. Data is LIVE (current), so the window is short and real-time.
+# =============================================================================
+module: conveyor
+title: Conveyor PdM
+component_type: zone
+description: >-
+  Predictive maintenance for GTP conveyor zones (belts/motors/diverters). Health is
+  inferred from per-zone congestion — conveyor queue depth vs its limit, peak backups,
+  sustained severe saturation, and buffer fill — relative to the zone's own baseline
+  and to peer zones. No maintenance logbook is used.
+
+default_window: now-24h          # congestion is a real-time signal; short window
+anchor_to_data_asof: true
+
+# ---- Data sources (resolved) ------------------------------------------------
+dashboards:
+  conveyor_zone_count:            # PRIMARY (per-zone congestion)
+    uid: lavIciTDk
+    env_key: CONVEYOR__CONVEYOR_ZONE_COUNT
+    role: primary
+    db: lenskart_gtp (MSSQL)
+    # One timeseries panel per zone; fields: time, Conveyor Actual/Limit, Buffer Actual/Limit.
+    zone_panels: {6: "1", 8: "2", 10: "3", 12: "4", 14: "5", 16: "6"}
+    snapshot_panel: 4             # latest per-zone Actual/Limit (best-effort context)
+    notes: conveyor_actual_count vs conveyor_limit_count (and buffer_*) per zone over time.
+
+  gtp_hold_transit:               # SECONDARY (module-level flow stress, not per-zone)
+    uid: C8jMvAcIk
+    env_key: CONVEYOR__GTP_HOLD_TRANSIT
+    role: secondary
+    db: lenskart_gtp (MSSQL)
+    panels: {2: ON_HOLD, 4: TRANSIT}
+    notes: Order/tray flow state (station_id). Counts surfaced as module flow-stress context.
+
+cross_module_notes:
+  - Discrepancy Report Events (D6sQle2Vz) is GTP-station pick verification (verification_events) -> reassigned to the GTP Station + Scanner module (Module 7), NOT conveyor jams.
+  - GTP HOLD/TRANSIT is order/station-centric; relevant to GTP Station and a future Buffer/Outbound module.
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5
+  tiers: {ok: 85, watch: 65, warn: 40}
+  severe_ratio: 1.5               # actual/limit >= this counts as severe saturation
+  peak_ref: 2.0                   # peak ratio above this is an extreme backup
+  buffer_normal: 0.30             # buffer fill below this is normal (penalise only excess)
+  penalties:                      # weight · cap (points off 100)
+    congestion_excess:  {weight: 40.0, cap: 35}   # per unit of mean(actual/limit) above 1.0
+    severe_saturation:  {weight: 30.0, cap: 25}   # share of time actual/limit >= severe_ratio
+    peak_excess:        {weight: 15.0, cap: 15}   # per unit of peak ratio above peak_ref
+    buffer_congestion:  {weight: 25.0, cap: 18}   # mean(buffer_actual/buffer_limit)
+    congestion_peer_z:  {weight: 6.0,  cap: 18}   # robust z of mean congestion vs zones
+  confidence:
+    min_samples_full: 500         # >= this many timeseries samples -> data-sufficient
+    coldstart_base: 0.45
+    trend_base: 0.72
+  ttm_bands_hours: {critical: 24, warn: 96, watch: 336}

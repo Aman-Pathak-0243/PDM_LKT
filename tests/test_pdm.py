@@ -163,6 +163,38 @@ def test_shuttle_cycles_normalisation_and_scoring():
     assert "FORK" in (by_id["QD_Shuttle_03_06"].primary_cause or "")
 
 
+# --------------------------- conveyor model ------------------------------ #
+def _conveyor_bundle():
+    from core.registry import FetchBundle as FB
+    rows = []
+    # zone_2: heavily congested (queue ~1.6x limit). zone_5: flowing (~0.7x).
+    for i in range(120):
+        rows.append({"time": f"2026-06-30 10:{i%60:02d}:00", "Conveyor Actual": 64,
+                     "Conveyor Limit": 40, "Buffer Actual": 6, "Buffer Limit": 40, "zone": "2"})
+        rows.append({"time": f"2026-06-30 10:{i%60:02d}:00", "Conveyor Actual": 28,
+                     "Conveyor Limit": 40, "Buffer Actual": 4, "Buffer Limit": 40, "zone": "5"})
+    df = pd.DataFrame(rows)
+    return FB(frames={"zone_counts": df}, rows_fetched=len(df), panels=[],
+              notes={"window": "now-24h", "system_on_hold": 10, "system_in_transit": 12})
+
+
+def test_conveyor_congestion_and_scoring():
+    from modules.conveyor.features import compute_features as ccf
+    from modules.conveyor.health import score as csc
+    feats = ccf(_conveyor_bundle())
+    assert set(feats) == {"zone_2", "zone_5"}
+    assert feats["zone_2"]["congestion_mean"] == 1.6           # 64/40
+    assert feats["zone_5"]["congestion_mean"] == 0.7           # 28/40
+    assert feats["zone_2"]["severe_saturation_share"] == 1.0   # always >= 1.5
+
+    comps = csc(feats, _NoHistory())
+    by_id = {c.component_id: c for c in comps}
+    assert by_id["zone_2"].health_score < by_id["zone_5"].health_score
+    assert by_id["zone_5"].risk_tier == "ok"
+    assert comps[0].component_id == "zone_2"                    # worst-first
+    assert "limit" in (by_id["zone_2"].primary_cause or "").lower()
+
+
 def test_methodology_doc_present_for_modules():
     import modules  # registers lift + shuttle
     from core.registry import all_modules, module_methodology

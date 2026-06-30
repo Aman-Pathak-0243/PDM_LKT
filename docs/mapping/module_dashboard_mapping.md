@@ -90,17 +90,21 @@ Scope: Equipment-health modules only. Inventory/order/decant-putaway dashboards 
 
 ---
 
-## 6. Conveyor PdM
-**Sub-component:** GTP conveyor zones (belts, motors, diverters)
+## 6. Conveyor PdM  ✅ BUILT (Session 3) — RESOLVED BY LIVE INSPECTION
+**Sub-component:** GTP conveyor zones (belts, motors, diverters). Universe = **6 zones**.
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | Conveyor Zone Count | GTP | Throughput per zone |
-| Primary | Discrepancy Report Events | GTP | Jam / misroute events per zone |
-| Secondary | GTP (HOLD, TRANSIT) | GTP | Flow state, stuck-in-transit signals |
+| Role | Dashboard | Folder | What it provides | Verified |
+|------|-----------|--------|------------------|----------|
+| Primary | Conveyor Zone Count (`lavIciTDk`) | GTP | Per-zone congestion: `conveyor_actual/limit` + `buffer_actual/limit` over time (6 zone panels) | ✅ live, ~65k rows |
+| Secondary | GTP (HOLD, TRANSIT) (`C8jMvAcIk`) | GTP | Order/tray flow state (counts = module flow stress) | ✅ panels #2/#4 |
 
-**Signal type:** Jam/misroute frequency + throughput drop per zone → belt/motor/diverter wear.
-**Build priority:** **3** — rotating asset with rich data.
+**Signal type:** per-zone **congestion** (queue vs limit, severe-saturation, peak, buffer fill, peer deviation) → belt/motor/diverter wear. Implemented in `modules/conveyor/`.
+
+> **CORRECTION (Session 3):** the mapping listed **Discrepancy Report Events** as conveyor
+> "jam/misroute per zone". Live SQL shows it is **GTP-station pick verification**
+> (`verification_events`: station/operation_type/type/discrepancy_type) keyed by **station**,
+> not zone — **reassigned to Module 7 (GTP Station + Scanner)**. Grafana exposes no discrete
+> conveyor jam-event feed, so conveyor health uses congestion (the observable symptom).
 
 ---
 
@@ -112,7 +116,7 @@ Scope: Equipment-health modules only. Inventory/order/decant-putaway dashboards 
 | Primary | GTP Scanner logs | GTP | Scan attempts / misreads (key leading indicator) |
 | Primary | GTP Station Information | GTP | Station uptime/downtime, status |
 | Secondary | Live GTP Summary | GTP | Real-time station throughput |
-| Secondary | Discrepancy Report Events | GTP | Scan-driven discrepancies |
+| **Primary** | Discrepancy Report Events (`D6sQle2Vz`) | GTP | **Per-station pick discrepancies** `verification_events`: `station, operation_type, type, discrepancy_type, create_time` (≈17.8k current rows) — *reassigned here from Conveyor in Session 3* |
 | Secondary | GTP Stations | GTP | Station master / config reference |
 
 **Signal type:** Scanner misread-rate trend + station downtime pattern → scanner/station hardware failure.

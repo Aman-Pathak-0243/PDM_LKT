@@ -24,8 +24,8 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 |---|--------|---------|--------|
 | 1 | Lift | [modules/lift/README.md](modules/lift/README.md) | ✅ built (Session 1) |
 | 2 | Shuttle | [modules/shuttle/README.md](modules/shuttle/README.md) | ✅ built (Session 2) — cycles-based RUL |
-| 3 | Conveyor | _next session_ | ⏳ planned (Conveyor Zone Count, Discrepancy Report Events, GTP HOLD/TRANSIT) |
-| 4 | Tracker / Position-Sensor | — | planned |
+| 3 | Conveyor | [modules/conveyor/README.md](modules/conveyor/README.md) | ✅ built (Session 3) — per-zone congestion (live data) |
+| 4 | Tracker / Position-Sensor | _next session_ | ⏳ planned (Bad Tracker Diagnosis, Aggregate Error Report) |
 | 5 | Gate | — | planned |
 | 6 | Bin / Tote Mechanical | — | planned |
 | 7 | GTP Station + Scanner | — | planned |

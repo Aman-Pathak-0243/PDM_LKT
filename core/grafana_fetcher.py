@@ -73,16 +73,23 @@ def _click_download(page, download_text: str):
         lambda: page.get_by_role("button", name=download_text, exact=False),
         lambda: page.get_by_text(download_text, exact=False),
     ]
-    for make in locators:
+    # Give the inspector Data tab time to render the button (panel query must run
+    # first). Retry the whole locator sweep a few times for slow/heavy panels.
+    for attempt in range(3):
+        for make in locators:
+            try:
+                loc = make()
+                if loc and loc.count() > 0:
+                    loc.first.wait_for(state="visible", timeout=20000)
+                    with page.expect_download(timeout=45000) as dl_info:
+                        loc.first.click()
+                    return dl_info.value
+            except Exception:  # noqa: BLE001
+                continue
         try:
-            loc = make()
-            if loc and loc.count() > 0:
-                loc.first.wait_for(state="visible", timeout=15000)
-                with page.expect_download(timeout=30000) as dl_info:
-                    loc.first.click()
-                return dl_info.value
+            page.wait_for_timeout(2000)
         except Exception:  # noqa: BLE001
-            continue
+            break
     raise PanelFetchError(
         f"'{download_text}' button not found in the panel inspector. "
         "The panel may have no data, or the Grafana UI differs from expectations."
@@ -104,7 +111,14 @@ def download_panel_csv(
     window = f"{frm}..{to}"
     page = session.new_page()
     try:
-        page.goto(url, wait_until="networkidle")
+        # Load fast, then give fast panels a brief chance to reach network idle.
+        # Heavy live dashboards never idle, so the timeout is swallowed and the
+        # Download-CSV button wait (below) is what actually gates readiness.
+        page.goto(url, wait_until="domcontentloaded")
+        try:
+            page.wait_for_load_state("networkidle", timeout=8000)
+        except Exception:  # noqa: BLE001
+            pass
         download = _click_download(page, cfg.grafana.download_button_text)
         path = download.path()
         if path is None:
