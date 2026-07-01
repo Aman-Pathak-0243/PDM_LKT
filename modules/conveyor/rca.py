@@ -15,6 +15,8 @@ _FACTOR_LABEL = {
     "peak_excess": "Extreme peak backup",
     "buffer_congestion": "Buffer filling (downstream backup)",
     "congestion_peer_z": "More congested than peer zones",
+    "sustained_congestion": "Congested most of the window (p90)",
+    "stall_idle": "Zone idle/stalled while peers flow (possible belt/motor stall)",
 }
 
 
@@ -32,15 +34,21 @@ def build_rca(feat: Dict[str, Any], penalties: Dict[str, float], peak_ref: float
     cm = feat.get("congestion_mean", 0.0)
     peak = feat.get("congestion_peak", 0.0)
     sat = feat.get("severe_saturation_share", 0.0)
+    idle = feat.get("idle_share", 0.0)
     material = [c for c in contributors if c["points"] >= 5]
     if material:
         top = material[0]["factor"]
-        if top == "buffer_congestion":
+        if top == "stall_idle":
+            primary = (f"Zone idle {idle:.0%} of the window while peer zones keep flowing "
+                       f"— possible belt/motor stall (throughput {feat.get('throughput_mean')})")
+        elif top == "buffer_congestion":
             primary = f"Buffer filling ({feat.get('buffer_congestion_mean'):.0%} of limit) — downstream backup"
         elif top == "peak_excess":
             primary = f"Peak backup {peak:.2f}× limit (extreme spikes)"
         elif top == "severe_saturation":
             primary = f"Severely saturated {sat:.0%} of the window (≥ severe limit)"
+        elif top == "sustained_congestion":
+            primary = f"Congested most of the window (p90 {feat.get('congestion_p90'):.2f}× limit)"
         else:
             primary = f"Queue runs {cm:.2f}× its limit on average"
     else:

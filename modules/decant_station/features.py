@@ -189,9 +189,14 @@ def _station_features(bundle: FetchBundle, window: str) -> Dict[str, Dict[str, A
             for _, row in rr.iterrows():
                 sid = str(row[id_col]).strip()
                 status = str(row[as_col]).strip() if as_col and pd.notna(row.get(as_col)) else "Unknown"
+                _sl = status.lower()
+                # Tri-state (matches the missing-row default below): True only for
+                # Active, False only for Inactive, None for Unknown/blank — so an
+                # unreported status is NOT treated as offline (no false offline-persistence).
+                is_active = True if _sl == "active" else (False if _sl == "inactive" else None)
                 roster_rows[sid] = {
                     "active_status": status,
-                    "is_active": status.lower() == "active",
+                    "is_active": is_active,
                     "user": str(row[us_col]).strip() if us_col and pd.notna(row.get(us_col)) else None,
                 }
 

@@ -151,3 +151,8 @@ See `/module/gate` (with its in-page Methodology section) and `data/inspection/s
   once that exists (compound-failure detection, mapping §9–§11).
 - As automation accumulates runs, the **trend** RUL and `non_closed_rate`/`peer_z` penalties
   activate automatically — no code change — sharpening each gate's time-to-maintenance.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** Cold-start `confidence` now tracks **data sufficiency** (prior runs), not the current reading's magnitude. `stuck_recurrence` converted from a raw count to a decaying **rate**. RCA distinguishes peer-deviation from own-history rate and **leads with an aisle-wide common cause** when ≥3 gates on an aisle are non-closed. Latency calibration comment corrected; unparsed-id aisle fallback zero-pads; `polyfit` guarded. See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

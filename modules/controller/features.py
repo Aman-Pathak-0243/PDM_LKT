@@ -47,7 +47,10 @@ def _row_features(row: pd.Series, idle_col: str, sql_col: str, node_id: str, win
     util = round(max(0.0, 100.0 - idle), 3)
     sql = min(max(sql, 0.0), 100.0)
     other = round(max(0.0, 100.0 - idle - sql), 3)
-    sql_share = round(sql / util, 4) if util > 0 else 0.0
+    # SQL cannot use more CPU than the total in use; clamp before the ratio so an
+    # inconsistent feed (e.g. idle=99, sql=41) can't yield sql_share far above 1.
+    sql_eff = min(sql, util)
+    sql_share = round(sql_eff / util, 4) if util > 0 else 0.0
     return {
         "component_id": node_id,
         "component_type": "compute_node",
@@ -71,8 +74,12 @@ def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
 
     idle_col = _col(df, "cpu_idle", "idle", "cpu idle")
     sql_col = _col(df, "cpu_sql", "sql", "cpu sql")
-    if not idle_col and not sql_col:
-        log.warning("CPU frame missing cpu_idle/cpu_sql", extra={"cols": list(df.columns)})
+    # Utilization is defined as 100 - cpu_idle, so the idle column is REQUIRED. If it
+    # is missing (renamed upstream) idle would silently default to 0 -> util=100 -> a
+    # false system-wide critical / meta alarm. sql is only context, so its absence is ok.
+    if not idle_col:
+        log.warning("CPU frame missing cpu_idle column — cannot compute utilization",
+                    extra={"cols": list(df.columns)})
         return {}
     # scalable: key by a host/node column if the proc ever returns one per row.
     node_col = _col(df, "host", "hostname", "node", "server", "instance", "name", "machine")

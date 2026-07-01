@@ -68,12 +68,12 @@ thresholds:
   status_pick_error: 8            # shuttle_command status meaning SHUTTLE_PICK_ERROR
   status_lift_error: 2            # lift_command status meaning ERROR
   penalties:                      # weight · cap (points off 100)
-    cluster:        {weight: 8.0,  cap: 34}   # per currently-stuck tote at this location
+    cluster:        {weight: 8.0,  cap: 34}   # per STALE (older) stuck tote at this location
     recent_cluster: {weight: 9.0,  cap: 30}   # per RECENT (active) stuck tote
     recurrence:     {weight: 7.0,  cap: 30}   # per prior run this location appeared bad (longitudinal)
     multi_shuttle:  {weight: 5.0,  cap: 15}   # per distinct shuttle beyond the first
     lift_involved:  {weight: 6.0,  cap: 12}   # bad-tracker rows with a lift in ERROR
-    peer_z:         {weight: 5.0,  cap: 18}   # robust z of bad_count vs peer locations
+    peer_z:         {weight: 5.0,  cap: 12}   # robust z of bad_count vs peers (deviation, not a 3rd cluster count)
   confidence:
     coldstart_base: 0.42
     trend_base: 0.72

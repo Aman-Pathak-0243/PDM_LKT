@@ -134,3 +134,8 @@ Methodology section) and `data/inspection/s6_bin_mech.png`.
   would let the cross-module flag name the *specific* shuttle rather than the aisle's shuttle.
 - As automation accumulates runs, the **trend** RUL activates automatically — recurrence
   frequency becomes a time-to-maintenance projection with rising confidence — no code change.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** **Block-age is now anchored to the actual run time** (not `max(blockedTime)`), so the freshest slot no longer reads age 0 and a systemic backlog is caught. Block-age **peer-z is gated by an absolute stuck-age floor** so trivially-fresh blocks aren't flagged. Chronic-slot `historical` cap reduced to an enrichment prior. Aisle-06 history-SQL gap and missing-tracker-column degradation now logged; `polyfit` guarded. See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

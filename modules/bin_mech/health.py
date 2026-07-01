@@ -80,7 +80,12 @@ def _trend(hist: List[Dict[str, Any]], score: float, min_runs: int):
     if len(pts) < min_runs:
         return None, False
     xs = np.array([q[0] for q in pts]); ys = np.array([q[1] for q in pts])
-    slope = np.polyfit(xs - xs.min(), ys, 1)[0]
+    if float(np.ptp(xs)) < 1e-9:      # identical timestamps -> polyfit would raise
+        return (0.0 if score <= CRITICAL_SCORE else None), True
+    try:
+        slope = np.polyfit(xs - xs.min(), ys, 1)[0]
+    except (np.linalg.LinAlgError, ValueError):
+        return (0.0 if score <= CRITICAL_SCORE else None), True
     if slope < -1e-4 and score > CRITICAL_SCORE:
         return min(float((score - CRITICAL_SCORE) / (-slope)), 24 * 365.0), True
     if score <= CRITICAL_SCORE:
@@ -95,6 +100,7 @@ def score(features: Dict[str, Dict[str, Any]], history: HistoryReader) -> List[C
     conf_cfg = t["confidence"]
     bands = t.get("ttm_bands_hours", {"critical": 48, "warn": 240, "watch": 720})
     grace = float(t.get("block_age_grace_hours", 2))
+    peer_z_min_age = float(t.get("peer_z_min_age_hours", 6))
     min_runs = int(t.get("history_min_runs_for_trend", 5))
 
     # peer baseline of block-age across the currently-blocked slots.
@@ -104,8 +110,15 @@ def score(features: Dict[str, Dict[str, Any]], history: HistoryReader) -> List[C
     for cid, f in features.items():
         hist = history.component_history("bin_mech", cid, limit=400)
         recurrence_runs = len(hist)  # prior runs this slot appeared blocked (longitudinal)
-        age_excess = _grace_excess(f.get("block_age_hours", 0.0), grace)
-        peer_z = _robust_z(float(f.get("block_age_hours", 0.0)), ages)
+        age_h = float(f.get("block_age_hours", 0.0))
+        age_excess = _grace_excess(age_h, grace)
+        peer_z = _robust_z(age_h, ages)
+        # Gate peer deviation by absolute severity: only let "older than peers" count
+        # once the block itself is meaningfully stuck, so a trivially-fresh block that
+        # is merely the oldest of a fresh batch is not pushed to watch, while a
+        # uniformly old-but-stuck set is still caught by the absolute block_age penalty.
+        if age_h < peer_z_min_age:
+            peer_z = 0.0
 
         penalties = _penalties(f, pen_cfg, recurrence_runs, age_excess, peer_z)
         total = sum(penalties.values())

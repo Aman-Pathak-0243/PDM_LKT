@@ -112,3 +112,8 @@ throughput / idle per lift), and Lift_Supply_Tote (load) are high-value sources
 that need template-variable handling (date/shift) or time handling before they
 yield CSV. Adding them means extending `fetch.py` + `features.py` and updating this
 chapter — no `core/` changes.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** Volume-gated the `severity`/`mechanical` intensity ratios so a single stale mechanical error no longer forces WARN. Trend `polyfit` guarded against identical timestamps. RCA now surfaces fault-timing context (median/min gap, bad-tracker events) — shown, not double-counted with rate. See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

@@ -54,11 +54,15 @@ def _col(df: pd.DataFrame, *names: str) -> Optional[str]:
 def _parse_window_days(window: Optional[str], default: float = 7.0) -> float:
     if not window:
         return default
-    m = re.search(r"now-(\d+)([dhwm])", str(window))
+    m = re.search(r"now-(\d+)([smhdwMy])", str(window))
     if not m:
         return default
     n, unit = int(m.group(1)), m.group(2)
-    return {"h": n / 24.0, "d": float(n), "w": n * 7.0, "m": n * 30.0}.get(unit, default)
+    # Grafana time units: lowercase 'm' = MINUTES, uppercase 'M' = months (a case-
+    # insensitive 'm'->months would mis-scale 'now-30m' to 900 days).
+    factor = {"s": 1 / 86400.0, "m": 1 / 1440.0, "h": 1 / 24.0, "d": 1.0,
+              "w": 7.0, "M": 30.0, "y": 365.0}
+    return n * factor.get(unit, 1.0)
 
 
 def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
@@ -133,7 +137,9 @@ def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
             "median_age_days": round(float(g_ages.median()), 2) if len(g_ages) else None,
             "distinct_shuttles": int(shuttles.nunique()),
             "dominant_shuttle": (sh_counts.index[0] if len(sh_counts) else None),
-            "dominant_shuttle_share": round(float(sh_counts.iloc[0] / len(g)), 3) if len(sh_counts) else 0.0,
+            # Share among SHUTTLE-ATTRIBUTED rows (not all rows), so NaN-shuttle rows
+            # don't dilute a genuine single-shuttle dominance below the 0.6 cross-flag.
+            "dominant_shuttle_share": round(float(sh_counts.iloc[0] / len(shuttles)), 3) if len(shuttles) else 0.0,
             "distinct_containers": int(containers),
             "lift_involved_count": int(lift_ids.nunique()),
             "lift_error_count": lift_err,

@@ -167,7 +167,11 @@ def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
         gaps_h = [(times[i] - times[i - 1]).total_seconds() / 3600.0 for i in range(1, len(times))]
         last_age_h = (as_of - times[-1]).total_seconds() / 3600.0 if (times and as_of is not None) else None
         total_cycles = cyc["total"]
-        epc = round(n / total_cycles * 1e6, 3) if total_cycles > 0 else float(n) * 1000.0
+        # errors/Mcycle is only defined when the shuttle's cycle count is known; a
+        # shuttle present in errors/daily/alerts but absent from the CYCLES roster
+        # gets None — NOT a fabricated n*1000 rate that would pollute the fleet
+        # median and every other shuttle's peer z-score.
+        epc = round(n / total_cycles * 1e6, 3) if total_cycles > 0 else None
         top_desc = max(desc_counts, key=desc_counts.get) if desc_counts else None
         top_type = max(type_counts, key=type_counts.get) if type_counts else None
 
@@ -198,19 +202,26 @@ def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
             "median_gap_hours": round(median(gaps_h), 3) if gaps_h else None,
             "last_error_age_hours": round(last_age_h, 2) if last_age_h is not None else None,
             "current_daily_errors": daily.get(sid, 0),
+            # Today's current errors beyond what the analysis window already counted:
+            # when the window covers today (live) daily≈window so excess≈0 (no
+            # double-count with epc/severity); when the window is frozen/old, the
+            # daily panel surfaces genuinely new activity -> full excess.
+            "current_daily_excess": max(int(daily.get(sid, 0)) - n, 0),
             "bad_tracker_events": bad.get(sid, {}).get("events", 0),
             "current_pick_error": bad.get(sid, {}).get("pick_error", False),
             "current_alert": sid in alerts,
         }
 
-    # Peer-relative signals across the fleet.
-    epcs = [f["errors_per_mcycle"] for f in feats.values()]
+    # Peer-relative signals across the fleet (exclude cycle-less shuttles whose epc
+    # is None so they neither pollute the median nor get a fabricated z-score).
+    epcs = [f["errors_per_mcycle"] for f in feats.values() if f["errors_per_mcycle"] is not None]
     reshuffles = [f["reshuffle_share"] for f in feats.values() if f["total_cycles"] > 0]
     peer_epc = round(median(epcs), 3) if epcs else 0.0
     peer_resh = round(median(reshuffles), 4) if reshuffles else 0.0
     for f in feats.values():
         f["fleet_median_epc"] = peer_epc
-        f["epc_peer_z"] = round(_robust_z(f["errors_per_mcycle"], epcs), 3)
+        f["epc_peer_z"] = (round(_robust_z(f["errors_per_mcycle"], epcs), 3)
+                           if f["errors_per_mcycle"] is not None else 0.0)
         f["fleet_median_reshuffle"] = peer_resh
         f["reshuffle_excess"] = round(max(f["reshuffle_share"] - peer_resh, 0.0), 4)
 

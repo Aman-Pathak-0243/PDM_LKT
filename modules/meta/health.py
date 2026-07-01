@@ -112,6 +112,11 @@ def score(features: Dict[str, Dict[str, Any]], history: HistoryReader) -> List[C
             "severity": severity_pts,
             "chain": _capped(chain_n, **p["chain"]),
             "persistence": _capped(max(consec - 1, 0), **p["persistence"]),
+            # An explicit '-> meta' flag (controller system throttle, network aisle-
+            # downtime cluster) is a first-class escalation from that module: surface
+            # the scope as >= watch even when only that one module is flagged (a
+            # coordinated cross-unit pattern, distinct from an independent single fault).
+            "meta_flag": _capped(1.0 if feat.get("has_meta_flag") else 0.0, **p["meta_flag"]),
         }
         if is_system:
             # a saturated controller is a system incident on its own (explicit system trigger);
@@ -130,7 +135,11 @@ def score(features: Dict[str, Dict[str, Any]], history: HistoryReader) -> List[C
         else:
             regime = "coldstart"
             ttm = bands.get(tier)
-            conf = min(0.9, conf_cfg["coldstart_base"] + 0.08 * breadth + 0.1 * chain_n + (0.1 if hist else 0.0))
+            # Confidence tracks DATA SUFFICIENCY (prior meta runs), NOT the current
+            # snapshot's breadth/chain magnitude — one 2-day snapshot is a coarse
+            # estimate (methodology §8), capped like the equipment modules at 0.85.
+            depth = min(1.0, len(hist) / max(min_runs, 1))
+            conf = min(0.85, conf_cfg["coldstart_base"] + 0.3 * depth + (0.05 if hist else 0.0))
 
         primary, rca = build_rca(feat, penalties, consec)
         metrics = dict(feat)

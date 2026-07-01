@@ -121,3 +121,8 @@ in-page Methodology section).
 Quadron Alerts also exposes buffer/lane/outbound panels (a future Buffer/Outbound module).
 As automation accumulates run history, the cycles-based **trend** RUL activates automatically —
 no code change — sharpening the per-shuttle time-to-maintenance.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** `current_daily` now penalises only the **excess** over the window count (no double-count). A cycle-less shuttle gets `errors_per_mcycle=None` (no fabricated `n·1000`, no fleet-median pollution). `current_badtracker` is now the binary pick-error state. Cycles-based trend **falls back to a time-based slope** when cumulative cycles are static (frozen data). `polyfit` guarded. See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

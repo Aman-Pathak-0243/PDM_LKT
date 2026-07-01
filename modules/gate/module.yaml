@@ -84,10 +84,10 @@ thresholds:
   stuck_grace_minutes: 2          # a gate non-closed <= this is treated as normal operation (no latency penalty)
   status_codes: {closed: 1, open_request: 2, open: 3}
   penalties:                      # weight · cap (points off 100)
-    stuck_latency:    {weight: 3.0,  cap: 62}   # per minute stuck non-closed beyond grace (~7min->watch, ~15->warn, ~22->critical alone)
+    stuck_latency:    {weight: 3.0,  cap: 62}   # per min stuck non-closed beyond grace (~7min->watch, ~14->warn, ~23->critical; caps at 62 => health floor 38 from latency alone)
     open_request:     {weight: 8.0,  cap: 8}    # caught in OPEN REQUEST INITIATED (mid-actuation, flat)
     persistence:      {weight: 12.0, cap: 36}   # per consecutive run non-closed beyond the first
-    stuck_recurrence: {weight: 6.0,  cap: 24}   # per prior run this gate was stuck (longitudinal)
+    stuck_recurrence: {weight: 40.0, cap: 20}   # FRACTION of prior runs stuck (rate, needs >= min_runs_for_rate; decays on recovery)
     non_closed_rate:  {weight: 35.0, cap: 22}   # fraction of prior runs non-closed (needs >= min_runs_for_rate)
     peer_z:           {weight: 5.0,  cap: 18}   # robust z of non_closed_rate vs peer gates
   confidence:

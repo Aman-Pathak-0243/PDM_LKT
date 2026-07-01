@@ -19,9 +19,9 @@ _FACTOR_LABEL = {
     "recurrence": "Same fault recurring",
     "diversity": "Many distinct fault types",
     "reshuffle_excess": "Reshuffle load above fleet",
-    "current_badtracker": "Current bad-tracker events",
+    "current_badtracker": "Currently in a pick-error state (bad-tracker)",
     "current_alert": "Currently in an active alert",
-    "current_daily": "Errors reported today",
+    "current_daily": "New errors reported today (beyond the window)",
 }
 
 

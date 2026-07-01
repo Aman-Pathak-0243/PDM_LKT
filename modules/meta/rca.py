@@ -16,6 +16,7 @@ _LABEL = {
     "persistence": "Compound incident persists across runs",
     "controller_trigger": "Controller saturated (system-wide)",
     "aisle_breadth": "Many aisles compound at once",
+    "meta_flag": "Explicit cross-module escalation (→ meta)",
 }
 
 
@@ -57,10 +58,15 @@ def build_rca(feat: Dict[str, Any], penalties: Dict[str, float], consec_compound
         else:
             primary = "System compound-risk: " + "; ".join(bits)
     else:
+        has_meta = bool(feat.get("has_meta_flag"))
         if breadth == 0:
             primary = f"{scope} nominal — no correlated cross-module degradation"
         elif breadth == 1:
-            primary = f"{scope}: single-subsystem issue ({modules[0]}) — not a compound incident (see that module)"
+            if has_meta:
+                primary = (f"{scope}: {modules[0]} raised an explicit cross-module escalation "
+                           f"(→ meta) — coordinated pattern (e.g. aisle-wide comms), watch for compounding")
+            else:
+                primary = f"{scope}: single-subsystem issue ({modules[0]}) — not a compound incident (see that module)"
         else:
             chain = f"; realized chain {_chain_str(edges)}" if edges else ""
             primary = (f"Compound incident on {scope}: {breadth} subsystems degraded "

@@ -83,6 +83,7 @@ cross_module_notes:
 # ---- Scoring thresholds (penalty model; see health.py) -----------------------
 thresholds:
   history_min_runs_for_trend: 5     # >= this many prior snapshots -> 'trend' regime
+  intensity_volume_gate_errors: 5   # severity/mechanical ratios reach full weight only at >= this many faults
   tiers:                            # health-score cut points (shared default shape)
     ok: 85
     watch: 65

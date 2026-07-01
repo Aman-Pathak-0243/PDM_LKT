@@ -56,7 +56,13 @@ def _flag_targets(comp: Dict[str, Any]) -> List[str]:
 
 
 def _worst_tier(tiers: List[str]) -> str:
-    return min(tiers, key=tier_rank) if tiers else "ok"
+    if not tiers:
+        return "ok"
+    # An unrecognised tier ranks as len(RISK_TIERS) (below 'ok'), so a flagged member
+    # with a nonstandard tier would be treated as LESS severe than 'ok'. Normalise any
+    # unknown tier to 'critical' so a genuine flag is never silently downgraded.
+    norm = [t if t in RISK_TIERS else "critical" for t in tiers]
+    return min(norm, key=tier_rank)
 
 
 def _correlate(members: List[Dict[str, Any]]) -> Dict[str, Any]:

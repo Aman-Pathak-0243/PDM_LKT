@@ -87,9 +87,14 @@ def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
 
     feats: Dict[str, Dict[str, Any]] = {}
     for sid, uptime in win_up.items():
-        downtime = round(max(0.0, 100.0 - uptime), 3)
+        # Clamp downtime to a physical [0,100] ceiling. Panel #2 (today) divides a
+        # SUM of disconnect-durations by seconds-elapsed-since-midnight, so early in
+        # the day a brief disconnect can push uptime% negative -> downtime% > 100%.
+        # Without the upper clamp that artefact surfaces as an impossible
+        # "150% downtime today" in the RCA and a spurious recent-spike diagnosis.
+        downtime = round(min(100.0, max(0.0, 100.0 - uptime)), 3)
         today_u = today_up.get(sid)
-        today_dt = round(max(0.0, 100.0 - today_u), 3) if today_u is not None else None
+        today_dt = round(min(100.0, max(0.0, 100.0 - today_u)), 3) if today_u is not None else None
         feats[sid] = {
             "component_id": sid,
             "component_type": "network_link",

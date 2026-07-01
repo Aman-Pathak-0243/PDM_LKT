@@ -37,12 +37,18 @@ def _tier(score: float, t: Dict[str, float]) -> str:
     return "critical"
 
 
-def _penalties(feat: Dict[str, Any], p: Dict[str, Any]) -> Dict[str, float]:
+def _penalties(feat: Dict[str, Any], p: Dict[str, Any], vgate: float) -> Dict[str, float]:
+    # Volume-gate the intensity RATIOS (severity, mechanical share) by a saturating
+    # factor of the fault count, so a single stale event (share=1.0) cannot alone
+    # drive a lift to WARN; a lift needs a few faults before its severity/mechanical
+    # mix is trusted at full weight. (Rate signals are already volume-aware.)
+    n = float(feat.get("error_count", 0) or 0)
+    vf = min(1.0, n / vgate) if vgate > 0 else 1.0
     return {
         "rate_peer_z": _capped(feat.get("rate_peer_z", 0.0), **p["rate_peer_z"]),
         "abs_rate": _capped(feat.get("error_rate_per_day", 0.0), **p["abs_rate"]),
-        "severity": _capped(feat.get("severity_mean", 0.0), **p["severity"]),
-        "mechanical": _capped(feat.get("mechanical_share", 0.0), **p["mechanical"]),
+        "severity": _capped(feat.get("severity_mean", 0.0) * vf, **p["severity"]),
+        "mechanical": _capped(feat.get("mechanical_share", 0.0) * vf, **p["mechanical"]),
         "recurrence": _capped(max(feat.get("recurrence_max", 0) - 2, 0), **p["recurrence"]),
         "diversity": _capped(max(feat.get("distinct_codes", 0) - 2, 0), **p["diversity"]),
         "current_error": _capped(1.0 if feat.get("current_error_status") else 0.0, **p["current_error"]),
@@ -73,18 +79,27 @@ def _ttm_and_confidence(
         if len(pts) >= min_runs_trend:
             xs = np.array([p[0] for p in pts])
             ys = np.array([p[1] for p in pts])
-            slope, intercept = np.polyfit(xs - xs.min(), ys, 1)  # points per hour
-            if slope < -1e-4 and score > CRITICAL_SCORE:
-                ttm = float((score - CRITICAL_SCORE) / (-slope))
-                ttm = min(ttm, 24 * 365.0)  # cap at one year
-            elif score <= CRITICAL_SCORE:
-                ttm = 0.0
-            else:
-                ttm = None  # stable/improving
-            # Confidence rises with history depth + data sufficiency.
-            conf = conf_cfg["trend_base"] + 0.2 * min(1.0, n_hist / (3 * min_runs_trend))
-            conf = min(0.97, conf * (0.6 + 0.4 * data_factor))
-            return ttm, conf, "trend"
+            slope = None
+            # Guard the fit: identical timestamps (e.g. a same-second backfill) give
+            # zero x-spread and np.polyfit raises LinAlgError; fall through to
+            # cold-start rather than crashing the whole run.
+            if float(np.ptp(xs)) >= 1e-9:
+                try:
+                    slope = np.polyfit(xs - xs.min(), ys, 1)[0]  # points per hour
+                except (np.linalg.LinAlgError, ValueError):
+                    slope = None
+            if slope is not None:
+                if slope < -1e-4 and score > CRITICAL_SCORE:
+                    ttm = float((score - CRITICAL_SCORE) / (-slope))
+                    ttm = min(ttm, 24 * 365.0)  # cap at one year
+                elif score <= CRITICAL_SCORE:
+                    ttm = 0.0
+                else:
+                    ttm = None  # stable/improving
+                # Confidence rises with history depth + data sufficiency.
+                conf = conf_cfg["trend_base"] + 0.2 * min(1.0, n_hist / (3 * min_runs_trend))
+                conf = min(0.97, conf * (0.6 + 0.4 * data_factor))
+                return ttm, conf, "trend"
 
     # Cold-start regime: coarse tier band, low confidence.
     band = {"critical": 24.0, "warn": 96.0, "watch": 336.0, "ok": None}[tier]
@@ -99,10 +114,11 @@ def score(features: Dict[str, Dict[str, Any]], history: HistoryReader) -> List[C
     tiers = t["tiers"]
     conf_cfg = t["confidence"]
     min_runs_trend = int(t.get("history_min_runs_for_trend", 5))
+    vgate = float(t.get("intensity_volume_gate_errors", 5))
 
     out: List[ComponentHealth] = []
     for lid, feat in features.items():
-        penalties = _penalties(feat, pen_cfg)
+        penalties = _penalties(feat, pen_cfg, vgate)
         total = sum(penalties.values())
         health = max(0.0, 100.0 - total)
         tier = _tier(health, tiers)

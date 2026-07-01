@@ -7,8 +7,10 @@ them into **ranked compound-risk incidents**, surfacing compound failures with a
 — e.g. *"controller saturation → network downtime → shuttle errors → bin blocks on the same aisle"* — as
 **one** incident instead of ten unrelated per-module flags. This is information no single module can see.
 
-- **`incident_scope`** — a correlation scope. **6 ASRS aisles** (`aisle_01…06`, the observed
-  `metrics_json.aisle` values) **+ 1 `system` scope** = 7 fixed components. An **aisle** scope groups the
+- **`incident_scope`** — a correlation scope. Up to **6 ASRS aisles** (`aisle_01…06`) **+ 1 `system`
+  scope**. The aisle roster is **dynamic**: an aisle scope exists only when a stored component carries
+  that `metrics_json.aisle`, so early after deployment (before every aisle has scored rows) fewer than 6
+  aisle tiles may appear; the `system` scope is always present. An **aisle** scope groups the
   flagged components of every module that maps to that aisle (`lift`, `shuttle`, `tracker`, `gate`,
   `bin_mech`, `network`, + decant infeed diverters); the **system** scope groups the `controller` + the
   non-aisle areas (GTP, decant stations, conveyor) + a breadth-of-compound-aisles signal.
@@ -26,7 +28,8 @@ other modules persist their fresh rows **before** meta correlates them.
 >   Network status, Controller = CPU Stats, Shuttle = QUADRON ERROR HISTORY, Gate/Shuttle = Quadron Alerts)
 >   or was **dropped** as redundant (Aggregate Error Report = `shuttle_error ∪ lift_error`, covered by
 >   Shuttle + Lift). Re-fetching them would double-count — so meta reads **only the store**.
-> - **Meta components = 6 aisles + system** (fixed roster, always present so the tile is meaningful).
+> - **Meta components = the observed aisles + system** (dynamic aisle roster — the `system` scope is
+>   always present; aisle scopes appear as components with that `metrics_json.aisle` accumulate in the store).
 > - **Compound-risk, not a re-tally.** The score reflects module **co-occurrence + realized causal chains
 >   + persistence**, not the sum of member health — so it never double-counts a module's own verdict.
 > - **Surfaced on the generic `/module/meta` page** (ranked incidents + in-page Methodology) + an Overview
@@ -64,17 +67,20 @@ modules + decant diverters); components without it → the `system` scope. Per s
 
 | Penalty | Driven by | weight · cap |
 |---------|-----------|--------------|
-| `breadth` | `distinct_flagged_modules − 1` | 16 · 48 |
+| `breadth` | `distinct_flagged_modules − 1` | 9 · 45 (keeps breadth 2..6 distinct rather than saturating at 4) |
 | `severity` | worst flagged tier — **only when `breadth ≥ 2`** (amplifies a compound incident; never manufactures one from a lone module) | critical 18 / warn 8 / watch 2 |
 | `chain` | `chain_edge_count` (realized causal edges) | 8 · 24 |
 | `persistence` | consecutive prior meta runs this scope was compound (`breadth ≥ 2`) | 6 · 24 |
+| `meta_flag` | a flagged member carries an explicit `→ meta` escalation (network aisle-downtime cluster / controller throttle) — surfaces a coordinated cross-unit pattern as **≥ watch even at breadth 1** | 18 · 18 |
 | *(system)* `controller_trigger` | controller node tier (a saturated controller is a system incident on its own) | critical 30 / warn 15 / watch 5 |
 | *(system)* `aisle_breadth` | count of simultaneously-compound aisles (systemic common cause) | 10 / aisle, cap 40 |
 
 **The key anti-double-count rule:** an aisle with a **single** flagged module stays `ok` (that module
-owns it); meta escalates only when **≥ 2 modules co-occur**, and hardest when a **realized causal chain**
-links them. So the meta score is genuinely new cross-module information, not a re-flag of what the
-individual modules already report.
+owns it) — **unless** that module raised an explicit `→ meta` escalation (a coordinated cross-unit
+pattern, e.g. a network aisle-wide downtime cluster), which surfaces the scope as `watch`. Otherwise meta
+escalates only when **≥ 2 modules co-occur**, and hardest when a **realized causal chain** links them. So
+the meta score is genuinely new cross-module information, not a re-flag of what the individual modules
+already report.
 
 **Risk tier** from score: `ok ≥ 85`, `watch 65–85`, `warn 40–65`, `critical < 40` — incidents ranked
 worst-first. **RUL/regime:** cold-start uses a coarse band by tier (compound incidents escalate fast);
@@ -91,7 +97,7 @@ degradation"*. The RCA carries the **chain edges**, the **flagged members** (for
 
 ## 5. How the overall module status is reached
 
-The **System-Wide Anomaly (Meta) PdM** tile shows the **worst incident tier** across the 7 scopes
+The **System-Wide Anomaly (Meta) PdM** tile shows the **worst incident tier** across the active scopes
 (`critical > warn > watch > ok`), the per-tier counts, and the last-run time — i.e. the single most urgent
 compound incident in the plant. The per-component table (worst-first) is the **ranked incident list**.
 Identical rollup mechanism as every other module (`core/registry.py`).
@@ -135,3 +141,8 @@ meta has no Grafana source; its "inspection" is the store itself.
   order and by cross-run lead/lag once enough history accrues, turning correlation into causation ranking.
 - The module set is now **complete (11/11)** — the notebook compiles Chapter 1, Chapter 2, one chapter per
   module (Lift … Meta), then the data-volume chapter.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** The explicit `→ meta` escalation (`has_meta_flag`) is now **consumed** via a bounded `meta_flag` penalty, surfacing a coordinated cross-unit pattern (e.g. a network aisle-downtime cluster) as ≥ watch even at breadth 1. The `breadth` penalty was **rebalanced** (9·(b−1) cap 45) so 4/5/6-module aisles are no longer indistinguishable. Cold-start confidence tied to store depth (cap 0.85). `_worst_tier` treats an unknown tier as most-severe. See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

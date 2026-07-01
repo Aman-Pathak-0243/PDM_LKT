@@ -18,6 +18,7 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 - [Chapter 3 — Data volume](docs/notebook/03_data_volume.md) — fetch volumes + store growth.
 - [Module ↔ Dashboard mapping](docs/mapping/module_dashboard_mapping.md) — the master repository index (kept in sync).
 - [DB schema](db/schema.sql) — MySQL schema (designed; CSV mirror is active until permission).
+- [Audit & hardening report](docs/AUDIT_REPORT.md) — Session 12 full-codebase correctness/methodology/RCA audit + fixes (see also methodology.md §12).
 
 ## Modules
 | # | Module | Chapter | Status |

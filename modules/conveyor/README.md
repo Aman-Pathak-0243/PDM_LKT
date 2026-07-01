@@ -103,3 +103,8 @@ fault-rate signal (normalised by throughput) alongside congestion. The GTP HOLD/
 counts could be mapped to zones if a zone/station map is provided, turning stuck-in-transit
 into a per-zone signal. As automation accumulates runs, the **trend** RUL activates
 automatically — no code change.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** Added a **`stall_idle`** signal (peer-anomalous idleness) so a seized/dead zone — zero throughput, congestion 0 — is now flagged instead of scoring a perfect 100; a plant-wide quiet period yields no false stall. Wired the documented `congestion_p90` as a **`sustained_congestion`** penalty. Secondary HOLD/TRANSIT fetch now honours the run window; trend `polyfit` guarded. See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

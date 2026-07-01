@@ -156,3 +156,8 @@ See `/module/network` (with its in-page Methodology section), `scripts/inspect_n
 - **Meta-module chaining** — the aisle-cluster + shuttle cross-flags are the hooks for the Module 11
   meta layer to correlate `network → shuttle errors → bin blocks` compound failures.
 - As automation accumulates runs, the **trend** RUL and recurrence penalties sharpen automatically.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** `today_downtime%` and windowed `downtime%` are **clamped to `[0,100]`** at source, so panel #2's seconds-since-midnight denominator can no longer surface an impossible '>100% downtime today' value or a spurious recency-spike RCA. See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

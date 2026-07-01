@@ -200,11 +200,13 @@ class MySQLBackend(StorageBackend):
             return [r[0] for r in conn.execute(stmt)]
 
     def upsert(self, table, key_cols, row) -> None:
-        existing = self.select(table, {k: row[k] for k in key_cols}, limit=1)
+        # Use row.get(k) (not row[k]) to match the CSV backend: a missing key
+        # column is treated as NULL rather than raising KeyError.
+        existing = self.select(table, {k: row.get(k) for k in key_cols}, limit=1)
         if existing:
             schema = self.schema(table)
             t = self._t(table)
-            where = self._where(t, {k: row[k] for k in key_cols})
+            where = self._where(t, {k: row.get(k) for k in key_cols})
             with self._engine.begin() as conn:
                 conn.execute(t.update().where(where).values(**self._encode(schema, row)))
         else:

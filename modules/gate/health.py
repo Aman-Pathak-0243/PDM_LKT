@@ -79,6 +79,9 @@ def _prior_stats(feat: Dict[str, Any], hist: List[Dict[str, Any]]) -> Dict[str, 
         "prior_non_closed": prior_non_closed,
         "prior_stuck": prior_stuck,
         "non_closed_rate": round(prior_non_closed / runs, 4) if runs else 0.0,
+        # Fraction of observed runs the gate was stuck (a RATE, so it decays as the
+        # gate recovers — a raw count would hold a recovered gate down forever).
+        "stuck_rate": round(prior_stuck / runs, 4) if runs else 0.0,
         "consecutive_non_closed": consec,
     }
 
@@ -88,7 +91,7 @@ def _penalties(feat: Dict[str, Any], prior: Dict[str, Any], p: Dict[str, Any], a
         "stuck_latency": _capped(feat.get("stuck_excess_minutes", 0.0), **p["stuck_latency"]),
         "open_request": _capped(1.0 if feat.get("is_open_request") else 0.0, **p["open_request"]),
         "persistence": _capped(max(prior["consecutive_non_closed"] - 1, 0), **p["persistence"]),
-        "stuck_recurrence": _capped(prior["prior_stuck"], **p["stuck_recurrence"]),
+        "stuck_recurrence": _capped(prior["stuck_rate"] if apply_rate else 0.0, **p["stuck_recurrence"]),
         "non_closed_rate": _capped(prior["non_closed_rate"] if apply_rate else 0.0, **p["non_closed_rate"]),
         "peer_z": _capped(prior.get("peer_z", 0.0) if apply_rate else 0.0, **p["peer_z"]),
     }
@@ -105,7 +108,12 @@ def _trend(hist: List[Dict[str, Any]], score: float, min_runs: int):
     if len(pts) < min_runs:
         return None, False
     xs = np.array([q[0] for q in pts]); ys = np.array([q[1] for q in pts])
-    slope = np.polyfit(xs - xs.min(), ys, 1)[0]  # health per hour
+    if float(np.ptp(xs)) < 1e-9:      # identical timestamps -> polyfit would raise
+        return (0.0 if score <= CRITICAL_SCORE else None), True
+    try:
+        slope = np.polyfit(xs - xs.min(), ys, 1)[0]  # health per hour
+    except (np.linalg.LinAlgError, ValueError):
+        return (0.0 if score <= CRITICAL_SCORE else None), True
     if slope < -1e-4 and score > CRITICAL_SCORE:
         return min(float((score - CRITICAL_SCORE) / (-slope)), 24 * 365.0), True
     if score <= CRITICAL_SCORE:
@@ -155,9 +163,11 @@ def score(features: Dict[str, Dict[str, Any]], history: HistoryReader) -> List[C
         else:
             regime = "coldstart"
             ttm = bands.get(tier)
-            evidence = min(1.0, feat.get("stuck_excess_minutes", 0.0) / 12.0
-                           + (0.25 if feat.get("is_non_closed") else 0.0))
-            conf = min(0.85, conf_cfg["coldstart_base"] + 0.3 * evidence + (0.12 if hist else 0.0))
+            # Confidence tracks DATA SUFFICIENCY (prior runs supporting the verdict),
+            # NOT the magnitude of the current reading — a loud single snapshot on no
+            # history must stay low-confidence (methodology §8).
+            depth = min(1.0, prior["runs_observed"] / max(min_runs_rate, 1))
+            conf = min(0.85, conf_cfg["coldstart_base"] + 0.33 * depth + (0.05 if hist else 0.0))
 
         primary, rca = build_rca(feat, prior, penalties)
         metrics = dict(feat)

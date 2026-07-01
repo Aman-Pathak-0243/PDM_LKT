@@ -34,12 +34,15 @@ def build_rca(feat: Dict[str, Any], penalties: Dict[str, float], recurrence_runs
     dom_sh = feat.get("dominant_shuttle")
     dom_share = feat.get("dominant_shuttle_share", 0.0)
 
+    pick_err = feat.get("pick_error_count", 0)
     cross: List[Dict[str, str]] = []
     # One shuttle dominating a recurring/clustered position -> may be the shuttle, not the sensor.
     if dom_sh and dom_share >= 0.6 and (bad >= 2 or recurrence_runs >= 2):
-        cross.append({"module": "shuttle",
-                      "reason": f"{dom_sh} accounts for {dom_share:.0%} of mislocations here "
-                                f"(possible shuttle positioning fault, e.g. NOT_AT_CENTRE)"})
+        reason = (f"{dom_sh} accounts for {dom_share:.0%} of mislocations here "
+                  f"(possible shuttle positioning fault, e.g. NOT_AT_CENTRE)")
+        if pick_err:
+            reason += f"; {pick_err} row(s) flagged SHUTTLE_PICK_ERROR"
+        cross.append({"module": "shuttle", "reason": reason})
     if feat.get("lift_error_count", 0) > 0:
         cross.append({"module": "lift", "reason": "a lift is in ERROR on a bad-tracker row at this position"})
 
@@ -70,6 +73,8 @@ def build_rca(feat: Dict[str, Any], penalties: Dict[str, float], recurrence_runs
         "distinct_shuttles": distinct_sh,
         "dominant_shuttle": dom_sh,
         "dominant_shuttle_share": dom_share,
+        "pick_error_count": pick_err,
+        "lift_error_count": feat.get("lift_error_count", 0),
         "newest_age_days": feat.get("newest_age_days"),
         "oldest_age_days": feat.get("oldest_age_days"),
         "stuck_trackers": feat.get("stuck_trackers", []),

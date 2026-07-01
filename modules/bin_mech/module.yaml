@@ -83,14 +83,15 @@ thresholds:
   history_min_runs_for_trend: 5   # >= this many prior snapshots -> 'trend' regime
   tiers: {ok: 85, watch: 65, warn: 40}
   block_age_grace_hours: 2        # a block younger than this is treated as being actively resolved (no age penalty)
+  peer_z_min_age_hours: 6         # block-age peer deviation only counts once the block is at least this stuck
   status_blocked: 0               # bin_blocked.status = 0 means currently blocked
   penalties:                      # weight · cap (points off 100)
     blocked_base: {weight: 10.0, cap: 10}   # flat: this slot has a tote blocked right now
     block_age:    {weight: 2.0,  cap: 35}   # per hour the block has stayed unresolved beyond grace (stuck)
     cluster:      {weight: 12.0, cap: 24}   # per additional tote blocked at the same slot now
-    historical:   {weight: 0.4,  cap: 24}   # per historical block at this slot (frozen Bin Block History)
+    historical:   {weight: 0.4,  cap: 12}   # chronic-slot PRIOR from frozen Bin Block History (enrichment, not a tier driver)
     recurrence:   {weight: 8.0,  cap: 40}   # per prior PdM run this slot appeared blocked (our store)
-    peer_z:       {weight: 4.0,  cap: 14}   # robust z of block-age vs peer blocked slots
+    peer_z:       {weight: 4.0,  cap: 14}   # robust z of block-age vs peers (gated by peer_z_min_age_hours)
   confidence:
     coldstart_base: 0.42
     trend_base: 0.72

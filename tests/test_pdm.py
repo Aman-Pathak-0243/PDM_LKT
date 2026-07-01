@@ -560,3 +560,176 @@ def test_meta_persistence_escalates():
     recur = {c.component_id: c for c in msc(feats, _Hist())}["aisle_01"]
     assert recur.metrics["consecutive_compound"] == 5
     assert recur.health_score < cold.health_score
+
+
+# =========================================================================== #
+# Regression tests for the Session-audit fixes (Task 1).
+# =========================================================================== #
+
+# ---- storage: bool round-trip, inclusive date_to, batch delete ----------- #
+def test_csv_bool_string_roundtrip_not_flipped(tmp_path):
+    """A BOOL cell stored as the string 'false' (archive/restore path) must stay False."""
+    be = CsvBackend(tmp_path)
+    be.init_schema()
+    be.insert("panel_catalog", [{
+        "module": "lift", "dashboard_uid": "u", "dashboard_name": "d", "panel_id": 2,
+        "panel_title": "t", "panel_type": "table", "fields_json": [], "sql_text": "",
+        "is_signal": "false", "role": "none", "notes": "", "updated_at": now_iso(),
+    }])
+    row = be.select("panel_catalog", {"panel_id": 2})[0]
+    assert row["is_signal"] is False  # 'false' string must NOT become True
+
+
+def test_exporting_date_to_inclusive_and_batch_delete(tmp_path, monkeypatch):
+    import core.storage as storage_mod
+    import webapp.exporting as exporting
+    be = CsvBackend(tmp_path)
+    be.init_schema()
+    monkeypatch.setattr(storage_mod, "get_storage", lambda: be)
+    monkeypatch.setattr(exporting, "get_storage", lambda: be)
+    # rows across two days; the later ones are on the requested end date with a time part.
+    for i in range(3):
+        be.insert("component_health", [{
+            "run_uid": "r", "module": "lift", "component_id": f"L{i}", "component_type": "lift",
+            "health_score": 50.0, "risk_tier": "warn", "predicted_ttm_hours": None,
+            "confidence": 0.5, "prediction_regime": "coldstart", "primary_cause": "x",
+            "rca_json": {}, "metrics_json": {}, "created_at": "2026-07-01T13:0%d:00.000+00:00" % i,
+        }])
+    rows = exporting._select("component_health", "2026-06-01", "2026-07-01", None, None)
+    assert len(rows) == 3  # bare-date date_to must INCLUDE same-day timestamped rows
+    deleted = exporting.delete("component_health", date_from="2026-06-01",
+                               date_to="2026-07-01", confirm=True)
+    assert deleted == 3 and be.count("component_health") == 0
+
+
+# ---- conveyor: stall detection + quiet-plant no-false-flag --------------- #
+def _conveyor_zone_rows(zone, actual, limit=25, n=600):
+    return pd.DataFrame({"time": [f"t{i}" for i in range(n)], "zone": [zone] * n,
+                         "Conveyor Actual": actual, "Conveyor Limit": [limit] * n,
+                         "Buffer Actual": [0] * n, "Buffer Limit": [10] * n})
+
+
+def test_conveyor_stall_flagged_but_quiet_plant_not():
+    from modules.conveyor.features import compute_features as ccf
+    from modules.conveyor.health import score as csc
+    # dead zone_4 while peers flow -> flagged
+    frames = [_conveyor_zone_rows(z, [20] * 600) for z in ("1", "2", "3", "5", "6")]
+    frames.append(_conveyor_zone_rows("4", [0] * 600))
+    zc = pd.concat(frames, ignore_index=True)
+    res = {c.component_id: c for c in csc(ccf(FetchBundle(frames={"zone_counts": zc},
+                                                          notes={"window": "now-24h"})), _NoHistory())}
+    assert res["zone_4"].risk_tier in ("warn", "critical")
+    assert "stall" in res["zone_4"].primary_cause.lower()
+    assert res["zone_1"].risk_tier == "ok"
+    # whole plant quiet -> NO false stall
+    zc2 = pd.concat([_conveyor_zone_rows(z, [0] * 600) for z in ("1", "2", "3", "4", "5", "6")],
+                    ignore_index=True)
+    res2 = {c.component_id: c for c in csc(ccf(FetchBundle(frames={"zone_counts": zc2},
+                                                           notes={"window": "now-24h"})), _NoHistory())}
+    assert all(c.risk_tier == "ok" for c in res2.values())
+
+
+# ---- lift: single stale mechanical error must not be WARN ---------------- #
+def test_lift_single_stale_mechanical_error_volume_gated():
+    now = pd.Timestamp.now()
+    rows = [{"lift_id": "aisle_02_outbound_lift_01", "error_code": 5, "error_desc": "brake",
+             "created_time": (now - pd.Timedelta(days=25)).strftime("%Y-%m-%d %H:%M:%S"),
+             "updated_timestamp": ""}]
+    for i in range(6):
+        rows.append({"lift_id": "aisle_02_outbound_lift_02", "error_code": 18, "error_desc": "bin",
+                     "created_time": (now - pd.Timedelta(hours=i * 20)).strftime("%Y-%m-%d %H:%M:%S"),
+                     "updated_timestamp": ""})
+    feats = compute_features(FetchBundle(frames={"errors": pd.DataFrame(rows)}, notes={"window": "now-30d"}))
+    by = {c.component_id: c for c in score(feats, _NoHistory())}
+    assert by["aisle_02_outbound_lift_01"].risk_tier == "ok"  # one stale error != warn
+
+
+# ---- shuttle: cycle-less shuttle epc is None (no fleet pollution) --------- #
+def test_shuttle_cycleless_shuttle_epc_none():
+    from modules.shuttle.features import compute_features as scf
+    now = pd.Timestamp.now()
+    erows = [{"shuttle_id": "QD_Shuttle_09_09", "error_type": "FORK_ERROR", "error_desc": "x",
+              "created_time": (now - pd.Timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S"),
+              "updated_timestamp": ""}]
+    cyc = pd.DataFrame([{"shuttle_id": "QD_Shuttle_01_01", "PUTAWAY": 100, "PICKING": 100, "RESHUFFLING": 100}])
+    feats = scf(FetchBundle(frames={"errors": pd.DataFrame(erows), "cycles": cyc}, notes={"window": "now-2d"}))
+    assert feats["QD_Shuttle_09_09"]["errors_per_mcycle"] is None
+    assert feats["QD_Shuttle_09_09"]["epc_peer_z"] == 0.0  # does not get a fabricated z
+
+
+# ---- tracker: Grafana 'm' = minutes, not months ------------------------- #
+def test_tracker_window_parser_minutes():
+    from modules.tracker.features import _parse_window_days
+    assert abs(_parse_window_days("now-30m") - 30 / 1440.0) < 1e-9  # minutes, not 900 days
+    assert _parse_window_days("now-2M") == 60.0                     # uppercase M = months
+    assert _parse_window_days("now-7d") == 7.0
+
+
+# ---- gate: cold-start confidence tracks data sufficiency, not magnitude -- #
+def test_gate_coldstart_confidence_is_data_driven():
+    from modules.gate.features import compute_features as gcf
+    from modules.gate.health import score as gsc
+    # one gate stuck OPEN a long time, no history -> loud signal but must be LOW confidence.
+    gates = pd.DataFrame([{"id": "aisle_01_level_01_FG", "status": "OPEN", "aisle": "01"},
+                          {"id": "aisle_01_level_02_FG", "status": "CLOSED", "aisle": "01"}])
+    alerts = pd.DataFrame([{"message": "aisle_01_level_01_ front_gate opened for 40 minutes"}])
+    b = FetchBundle(frames={"gate_status": gates, "alerts": alerts}, notes={"window": "now-2d"})
+    comps = {c.component_id: c for c in gsc(gcf(b), _NoHistory())}
+    stuck = comps["aisle_01_level_01_FG"]
+    assert stuck.prediction_regime == "coldstart"
+    assert stuck.confidence <= 0.6   # loud reading, zero history -> low confidence
+
+
+# ---- bin_mech: systemic backlog (old blocks, nothing fresh) is flagged --- #
+def test_bin_mech_block_age_anchored_to_run_time():
+    from modules.bin_mech.features import compute_features as bcf
+    from modules.bin_mech.health import score as bsc
+    now = pd.Timestamp.now()
+    rows = []
+    for loc, hrs in [("001-01-1-001-1-01", 40), ("002-01-1-002-1-01", 50), ("003-01-1-003-1-01", 60)]:
+        rows.append({"location": loc, "tracker": "T" + loc, "container": "C" + loc,
+                     "aisle": loc[:3], "level": "01",
+                     "blockedTime": (now - pd.Timedelta(hours=hrs)).strftime("%Y-%m-%d %H:%M:%S")})
+    feats = bcf(FetchBundle(frames={"blocked": pd.DataFrame(rows)}, notes={"window": "now-2d"}))
+    # newest block must NOT read age 0 (anchored to run time, not max(blockedTime))
+    assert min(f["block_age_hours"] for f in feats.values()) >= 39
+    res = {c.component_id: c for c in bsc(feats, _NoHistory())}
+    assert all(c.risk_tier in ("warn", "critical") for c in res.values())  # 40h+ stuck -> flagged
+
+
+# ---- decant: Unknown/blank station status is tri-state (not offline) ----- #
+def test_decant_unknown_status_is_none_not_offline():
+    from modules.decant_station.features import compute_features as dcf
+    scan = pd.DataFrame([{"scanner": "aisle_01_decant_diverter", "ReadCount": 1000, "NoReadCount": 5}])
+    stations = pd.DataFrame([{"Station ID": "DS007", "active_status": "", "User": ""}])
+    feats = dcf(FetchBundle(frames={"misread": scan, "stations": stations,
+                                    "cartons": pd.DataFrame()}, notes={"window": "now-2d"}))
+    assert feats["DS007"]["is_active"] is None  # Unknown != offline
+
+
+# ---- network: today downtime clamped to a physical 100% ceiling ---------- #
+def test_network_today_downtime_clamped():
+    from modules.network.features import compute_features as ncf
+    # panel #2 SUM/tiny-elapsed can report uptime negative -> downtime would exceed 100 unclamped.
+    windowed = pd.DataFrame([{"shuttle_id": "QD_Shuttle_02_03", "uptime": 98.0}])
+    today = pd.DataFrame([{"shuttle_id": "QD_Shuttle_02_03", "uptime": -50.0}])
+    feats = ncf(FetchBundle(frames={"windowed": windowed, "today": today}, notes={"window": "now-2d"}))
+    f = feats["QD_Shuttle_02_03"]
+    assert f["today_downtime_pct"] <= 100.0 and f["downtime_pct"] <= 100.0
+
+
+# ---- controller: missing cpu_idle column -> no false 100% util alarm ----- #
+def test_controller_requires_idle_column():
+    from modules.controller.features import compute_features as ccf
+    # sql present but idle column renamed/absent -> must NOT fabricate util=100.
+    df = pd.DataFrame([{"CPUIdle": 70, "cpu_sql": 20}])  # 'CPUIdle' not an alias; only sql recognised
+    feats = ccf(FetchBundle(frames={"cpu": df}, notes={"window": "now-2d"}))
+    assert feats == {}  # refuses to score without a real idle column
+
+
+# ---- meta: worst_tier treats an unknown tier as most severe -------------- #
+def test_meta_worst_tier_unknown_is_severe():
+    from modules.meta.features import _worst_tier
+    assert _worst_tier(["warn", "severe"]) == "severe" or _worst_tier(["warn", "severe"]) == "critical"
+    # an unknown tier must never be treated as less severe than a real flag
+    assert _worst_tier(["warn", "zzz"]) != "warn"

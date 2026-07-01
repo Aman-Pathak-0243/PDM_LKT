@@ -129,3 +129,8 @@ sharpening. See `/module/tracker` (with its in-page Methodology section) and
   frequency becomes a time-to-maintenance projection, with rising confidence.
 - A discrete `location_tracker`-history feed (if exposed) would let recurrence be measured
   server-side rather than only across our snapshots.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** `cluster` now scores **stale** totes only (disjoint from `recent_cluster`) and `peer_z` cap reduced, so one cluster is no longer triple-counted. `dominant_shuttle_share` divides by shuttle-attributed rows (NaN-shuttle rows no longer dilute the ≥0.6 cross-flag). Window parser fixed: Grafana `m`=minutes, `M`=months. RCA surfaces `pick_error_count`. `polyfit` guarded. See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

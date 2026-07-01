@@ -100,9 +100,9 @@ thresholds:
     recurrence:        {weight: 1.5,  cap: 16}   # repeats of same error_desc beyond 2
     diversity:         {weight: 2.0,  cap: 10}   # distinct error types beyond 2
     reshuffle_excess:  {weight: 18.0, cap: 8}    # reshuffle_share above fleet median
-    current_badtracker: {weight: 4.0, cap: 16}   # per current bad-tracker event
+    current_badtracker: {weight: 12.0, cap: 12}  # binary: currently in a pick-error state
     current_alert:     {weight: 8.0,  cap: 8}    # currently named in an active alert
-    current_daily:     {weight: 3.0,  cap: 9}    # per current daily-error event
+    current_daily:     {weight: 3.0,  cap: 9}    # per today-only error NOT already in the window
   confidence:
     min_errors_full: 20
     coldstart_base: 0.4               # higher than lift: cycles give usage context even with no errors

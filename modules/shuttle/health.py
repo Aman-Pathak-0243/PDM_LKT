@@ -41,15 +41,21 @@ def _tier(score: float, t: Dict[str, float]) -> str:
 def _penalties(f: Dict[str, Any], p: Dict[str, Any]) -> Dict[str, float]:
     return {
         "epc_peer_z": _capped(f.get("epc_peer_z", 0.0), **p["epc_peer_z"]),
-        "epc_abs": _capped(f.get("errors_per_mcycle", 0.0), **p["epc_abs"]),
+        # epc may be None (shuttle absent from the CYCLES roster) -> 0 here, so a
+        # cycle-less shuttle is scored on its other signals, not a fabricated rate.
+        "epc_abs": _capped(f.get("errors_per_mcycle") or 0.0, **p["epc_abs"]),
         "severity": _capped(f.get("severity_mean", 0.0), **p["severity"]),
         "mechanical": _capped(f.get("mechanical_share", 0.0), **p["mechanical"]),
         "recurrence": _capped(max(f.get("recurrence_max", 0) - 2, 0), **p["recurrence"]),
         "diversity": _capped(max(f.get("distinct_types", 0) - 2, 0), **p["diversity"]),
         "reshuffle_excess": _capped(f.get("reshuffle_excess", 0.0), **p["reshuffle_excess"]),
-        "current_badtracker": _capped(f.get("bad_tracker_events", 0), **p["current_badtracker"]),
+        # Current bad-tracker penalises the binary current pick-error STATE (like the
+        # Lift module's current_error), not a raw event count.
+        "current_badtracker": _capped(1.0 if f.get("current_pick_error") else 0.0, **p["current_badtracker"]),
         "current_alert": _capped(1.0 if f.get("current_alert") else 0.0, **p["current_alert"]),
-        "current_daily": _capped(f.get("current_daily_errors", 0), **p["current_daily"]),
+        # Only the EXCESS of today's errors over the window count (avoids double-
+        # counting errors already scored by epc/severity/recurrence).
+        "current_daily": _capped(f.get("current_daily_excess", 0), **p["current_daily"]),
     }
 
 
@@ -69,17 +75,41 @@ def _trend_rul(history: List[Dict[str, Any]], score: float, min_runs: int):
     cyc = np.array([p[0] for p in pts])
     hl = np.array([p[1] for p in pts])
     tm = np.array([p[2] for p in pts])
-    if cyc.max() - cyc.min() < 1e-6:
-        return None, None, False
-    slope_hc = np.polyfit(cyc - cyc.min(), hl, 1)[0]      # health per cycle
-    if slope_hc >= -1e-9 or score <= CRITICAL_SCORE:
-        return (0.0 if score <= CRITICAL_SCORE else None), None, True
-    cycles_to_crit = (score - CRITICAL_SCORE) / (-slope_hc)
-    accrual = np.polyfit(tm - tm.min(), cyc, 1)[0]         # cycles per hour
-    ttm_hours = float(cycles_to_crit / accrual) if accrual > 1e-9 else None
-    if ttm_hours is not None:
-        ttm_hours = min(ttm_hours, 24 * 365.0)
-    return ttm_hours, float(cycles_to_crit), True
+
+    def _slope(x, y):
+        """Least-squares slope, guarded: None if x has no spread or the fit fails."""
+        if float(np.ptp(x)) < 1e-9:
+            return None
+        try:
+            return float(np.polyfit(x - x.min(), y, 1)[0])
+        except (np.linalg.LinAlgError, ValueError):
+            return None
+
+    # Preferred: health vs CUMULATIVE CYCLES (usage-based RUL).
+    slope_hc = _slope(cyc, hl)
+    if slope_hc is not None:
+        if slope_hc >= -1e-9 or score <= CRITICAL_SCORE:
+            return (0.0 if score <= CRITICAL_SCORE else None), None, True
+        cycles_to_crit = (score - CRITICAL_SCORE) / (-slope_hc)
+        accrual = _slope(tm, cyc)                          # cycles per hour
+        ttm_hours = float(cycles_to_crit / accrual) if (accrual and accrual > 1e-9) else None
+        if ttm_hours is not None:
+            ttm_hours = min(ttm_hours, 24 * 365.0)
+        return ttm_hours, float(cycles_to_crit), True
+
+    # Fallback: cumulative cycles are static across snapshots (e.g. a frozen source)
+    # but health has a time trajectory -> time-based slope, like the time-only modules,
+    # so the trend regime still activates instead of being stuck in cold-start.
+    slope_ht = _slope(tm, hl)
+    if slope_ht is not None:
+        if slope_ht < -1e-4 and score > CRITICAL_SCORE:
+            return min(float((score - CRITICAL_SCORE) / (-slope_ht)), 24 * 365.0), None, True
+        if score <= CRITICAL_SCORE:
+            return 0.0, None, True
+        return None, None, True
+
+    # No usable spread in either cycles or time -> stay cold-start.
+    return None, None, False
 
 
 def score(features: Dict[str, Dict[str, Any]], history: HistoryReader) -> List[ComponentHealth]:

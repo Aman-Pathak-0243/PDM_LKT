@@ -53,12 +53,17 @@ thresholds:
   severe_ratio: 1.5               # actual/limit >= this counts as severe saturation
   peak_ref: 2.0                   # peak ratio above this is an extreme backup
   buffer_normal: 0.30             # buffer fill below this is normal (penalise only excess)
+  idle:                           # STALL detection (a seized belt has zero congestion)
+    idle_normal: 0.40             # idle-sample share below this is normal low-flow
+    idle_z_gate: 1.0              # only penalise idleness when it is anomalous vs peer zones
   penalties:                      # weight · cap (points off 100)
-    congestion_excess:  {weight: 40.0, cap: 35}   # per unit of mean(actual/limit) above 1.0
-    severe_saturation:  {weight: 30.0, cap: 25}   # share of time actual/limit >= severe_ratio
-    peak_excess:        {weight: 15.0, cap: 15}   # per unit of peak ratio above peak_ref
-    buffer_congestion:  {weight: 25.0, cap: 18}   # mean(buffer_actual/buffer_limit)
-    congestion_peer_z:  {weight: 6.0,  cap: 18}   # robust z of mean congestion vs zones
+    congestion_excess:    {weight: 40.0, cap: 35}   # per unit of mean(actual/limit) above 1.0
+    severe_saturation:    {weight: 30.0, cap: 25}   # share of time actual/limit >= severe_ratio
+    peak_excess:          {weight: 15.0, cap: 15}   # per unit of peak ratio above peak_ref
+    buffer_congestion:    {weight: 25.0, cap: 18}   # mean(buffer_actual/buffer_limit)
+    congestion_peer_z:    {weight: 6.0,  cap: 18}   # robust z of mean congestion vs zones
+    sustained_congestion: {weight: 12.0, cap: 12}   # per unit of p90(actual/limit) above 1.0
+    stall_idle:           {weight: 100.0, cap: 55}  # peer-anomalous idleness beyond idle_normal (belt stall)
   confidence:
     min_samples_full: 500         # >= this many timeseries samples -> data-sufficient
     coldstart_base: 0.45

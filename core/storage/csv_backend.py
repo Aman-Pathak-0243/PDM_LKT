@@ -67,6 +67,11 @@ class CsvBackend(StorageBackend):
         if value is None:
             return ""
         if ctype == BOOL:
+            # Interpret string boolean literals symmetrically with ``_coerce`` so a
+            # value round-tripped as the string "false" (archive/restore, or a raw
+            # CSV re-insert) is not silently flipped to "true" by ``bool("false")``.
+            if isinstance(value, str):
+                return "true" if value.strip().lower() in {"true", "1", "yes", "on"} else "false"
             return "true" if bool(value) else "false"
         if ctype == JSON:
             return to_json(value)
@@ -113,16 +118,36 @@ class CsvBackend(StorageBackend):
                 writer.writerow({k: row.get(k, "") for k in schema.column_names})
         os.replace(tmp, self._path(table))
 
+    def _max_existing_id(self, table: str) -> int:
+        """Largest integer id currently in the table file (0 if none). Used to
+        self-heal a missing/corrupt ``.seq`` so ids can never collide after a crash."""
+        top = 0
+        for raw in self._read_raw(table):
+            try:
+                top = max(top, int(float(raw.get("id", "") or 0)))
+            except (TypeError, ValueError):
+                continue
+        return top
+
     def _next_ids(self, table: str, n: int) -> List[int]:
         seq = self._seq_path(table)
-        last = 0
+        last: Optional[int] = None
         if seq.exists():
             try:
-                last = int(seq.read_text().strip() or "0")
+                last = int(seq.read_text().strip())
             except ValueError:
-                last = 0
+                last = None
+        if last is None:
+            # Missing/corrupt counter (e.g. a crash between the row append and the
+            # .seq write, or a lost .seq) — recompute from the data so we never
+            # reissue an id that already exists.
+            last = self._max_existing_id(table)
         ids = list(range(last + 1, last + 1 + n))
-        seq.write_text(str(last + n))
+        # Atomic write (temp + os.replace) so a crash mid-write cannot truncate the
+        # counter to an empty/partial value.
+        tmp = seq.with_suffix(".seq.tmp")
+        tmp.write_text(str(last + n))
+        os.replace(tmp, seq)
         return ids
 
     # ----- locking -------------------------------------------------------- #
@@ -134,14 +159,25 @@ class CsvBackend(StorageBackend):
 
         def __enter__(self):
             self._tl.acquire()
-            self._fh = open(self.backend._lockfile(self.table), "w")
-            fcntl.flock(self._fh, fcntl.LOCK_EX)
+            try:
+                self._fh = open(self.backend._lockfile(self.table), "w")
+                fcntl.flock(self._fh, fcntl.LOCK_EX)
+            except BaseException:
+                # If the OS-lock setup fails (fd/disk exhaustion), never leak the
+                # in-process lock — release it and re-raise.
+                if self._fh is not None:
+                    self._fh.close()
+                    self._fh = None
+                self._tl.release()
+                raise
             return self
 
         def __exit__(self, *exc):
             try:
-                fcntl.flock(self._fh, fcntl.LOCK_UN)
-                self._fh.close()
+                if self._fh is not None:
+                    fcntl.flock(self._fh, fcntl.LOCK_UN)
+                    self._fh.close()
+                    self._fh = None
             finally:
                 self._tl.release()
 
@@ -226,10 +262,18 @@ class CsvBackend(StorageBackend):
             rows = [r for r in rows if self._matches(r, triples)]
         if order_by:
             col, direction = order_by
-            rows.sort(
-                key=lambda r: (r.get(col) is None, r.get(col)),
-                reverse=(direction or "asc").lower() == "desc",
+            reverse = (direction or "asc").lower() == "desc"
+            sec = "id" if any(c.name == "id" for c in self.schema(table).columns) else None
+            present = [r for r in rows if r.get(col) is not None]
+            missing = [r for r in rows if r.get(col) is None]
+            # Deterministic tiebreak on the surrogate id (so equal-timestamp rows
+            # order by insertion, newest-first under desc); NULLs always sort last
+            # regardless of direction.
+            present.sort(
+                key=lambda r: (r.get(col), r.get(sec) if sec is not None else 0),
+                reverse=reverse,
             )
+            rows = present + missing
         if limit is not None:
             rows = rows[:limit]
         return rows

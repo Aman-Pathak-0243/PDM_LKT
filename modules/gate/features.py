@@ -49,6 +49,18 @@ def _parse_gate_id(gate_id: str) -> Dict[str, Any]:
     return {"aisle": f"aisle_{int(m.group(1)):02d}", "level": int(m.group(2)), "face": face}
 
 
+def _fallback_aisle(val: Any) -> Optional[str]:
+    """Aisle key for a gate id that failed the regex — zero-padded to 2 digits so it
+    matches the parsed path (aisle_06, not aisle_006) and the meta scope key."""
+    s = str(val).strip()
+    if not s:
+        return None
+    try:
+        return f"aisle_{int(s):02d}"
+    except (TypeError, ValueError):
+        return f"aisle_{s}"
+
+
 def _status_code(text: Any) -> Optional[int]:
     """Map the panel's status text back to the gate enum (1/2/3); None if unmapped."""
     t = str(text).strip().upper()
@@ -130,7 +142,7 @@ def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
         feats[gid] = {
             "component_id": gid,
             "gate_id": gid,
-            "aisle": parsed["aisle"] or (f"aisle_{str(row[ai_col]).strip()}" if ai_col and pd.notna(row.get(ai_col)) else None),
+            "aisle": parsed["aisle"] or (_fallback_aisle(row[ai_col]) if ai_col and pd.notna(row.get(ai_col)) else None),
             "level": parsed["level"],
             "face": parsed["face"],
             "window": bundle.notes.get("window"),

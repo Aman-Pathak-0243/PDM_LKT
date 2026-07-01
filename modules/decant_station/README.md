@@ -218,3 +218,8 @@ See `/module/decant_station` (with its in-page Methodology section), `scripts/in
   (once a per-diverter hit-rate timeseries is fetchable) would sharpen the scanner signal.
 - As automation accumulates runs, the **trend** RUL, scanner recurrence, and station
   offline/idle-persistence penalties sharpen automatically — no code change.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** Missing/`Unknown` station status is now **tri-state** (`None`, not `False`) so an unreported status is not treated as offline. Scanner recurrence is **volume-gated** (a noisy low-scan run no longer compounds recurrence points the misread gate suppresses). See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

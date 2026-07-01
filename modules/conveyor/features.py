@@ -82,12 +82,21 @@ def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
 
     congs = [f["congestion_mean"] for f in feats.values()]
     bufs = [f["buffer_congestion_mean"] for f in feats.values()]
+    idles = [f["idle_share"] for f in feats.values()]
     peer_c = round(median(congs), 4) if congs else 0.0
     peer_b = round(median(bufs), 4) if bufs else 0.0
+    peer_idle = round(median(idles), 4) if idles else 0.0
     for f in feats.values():
         f["peer_median_congestion"] = peer_c
         f["congestion_peer_z"] = round(_robust_z(f["congestion_mean"], congs), 3)
         f["peer_median_buffer"] = peer_b
+        # Peer-relative idleness isolates a STALLED zone (belt/motor seized → zero
+        # throughput) from a plant-wide quiet period: a dead zone reads far more idle
+        # than its peers, while during a genuine lull every zone is idle and the z→0
+        # (no false stall flag). This is the signal congestion cannot see (congestion
+        # of a stopped belt is 0). See health.py:stall_idle.
+        f["peer_median_idle"] = peer_idle
+        f["idle_peer_z"] = round(_robust_z(f["idle_share"], idles), 3)
 
     log.info("conveyor features computed",
              extra={"zones": len(feats), "as_of": as_of,

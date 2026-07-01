@@ -63,7 +63,7 @@ def fetch(session, window: str) -> FetchBundle:
     if ht:
         for pid, key in ((2, "on_hold"), (4, "in_transit")):
             try:
-                r = download_panel_csv(session, ht, pid, frm="now-2d", to="now")
+                r = download_panel_csv(session, ht, pid, frm=window, to="now")
                 notes[f"system_{key}"] = r.row_count
                 rows += r.row_count
                 panels.append(_panel("C8jMvAcIk", "GTP (HOLD, TRANSIT)", pid,

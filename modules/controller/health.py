@@ -57,7 +57,10 @@ def _trend(hist: List[Dict[str, Any]], score: float, min_runs: int):
     xs = np.array([q[0] for q in pts]); ys = np.array([q[1] for q in pts])
     if float(np.ptp(xs)) < 1e-9:            # degenerate x (shared timestamps) -> can't project RUL
         return (0.0 if score <= CRITICAL_SCORE else None), True
-    slope = np.polyfit(xs - xs.min(), ys, 1)[0]  # health per hour
+    try:
+        slope = np.polyfit(xs - xs.min(), ys, 1)[0]  # health per hour
+    except (np.linalg.LinAlgError, ValueError):
+        return (0.0 if score <= CRITICAL_SCORE else None), True
     if slope < -1e-4 and score > CRITICAL_SCORE:
         return min(float((score - CRITICAL_SCORE) / (-slope)), 24 * 365.0), True
     if score <= CRITICAL_SCORE:
@@ -114,7 +117,10 @@ def score(features: Dict[str, Dict[str, Any]], history: HistoryReader) -> List[C
         else:
             regime = "coldstart"
             ttm = bands.get(tier)
-            conf = min(0.9, conf_cfg["coldstart_base"] + 0.25 * min(1.0, util / 100.0) + (0.1 if hist else 0.0))
+            # Confidence tracks DATA SUFFICIENCY (prior runs), not the CPU magnitude —
+            # a single high reading with no history is a coarse estimate, not a
+            # near-certain one (methodology §8). It sharpens as the store accrues.
+            conf = min(0.9, conf_cfg["coldstart_base"] + 0.25 * min(1.0, len(hist) / max(min_runs, 1)) + (0.05 if hist else 0.0))
 
         primary, rca = build_rca(feat, penalties, consec_high, tier,
                                  sql_dominant_share=sql_dominant, meta_tier=meta_tier)

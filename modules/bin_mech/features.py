@@ -49,8 +49,15 @@ def _historical_freq(history: pd.DataFrame) -> Dict[str, int]:
     if not src:
         return {}
     s = history[src].dropna().astype(str)
-    s = s[s.str.match(_LOC_RE)]
-    return {loc: int(n) for loc, n in s.value_counts().items()}
+    matched = s[s.str.match(_LOC_RE)]
+    dropped = len(s) - len(matched)
+    if dropped:
+        # The Bin Block History SQL only reformats aisles 001–005 into bin-slot
+        # format; aisle-006 sources (and any non-bin source) fail _LOC_RE and are
+        # dropped, so aisle-6 slots get no chronic-slot prior. Surface the gap.
+        log.info("bin history: source rows not in bin-slot format dropped (incl. the aisle_06 SQL gap)",
+                 extra={"dropped": int(dropped), "kept": int(len(matched))})
+    return {loc: int(n) for loc, n in matched.value_counts().items()}
 
 
 def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
@@ -68,6 +75,12 @@ def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
     ai_col = _col(blocked, "aisle")
     lv_col = _col(blocked, "level")
     bt_col = _col(blocked, "blockedTime", "blocked_time", "blockedtime")
+    if not trk_col:
+        # Without a tracker column the partition dedup and the multi-tote cluster
+        # signal both collapse to one row per slot — warn so the silent signal loss
+        # (a header rename upstream) is visible rather than scoring every slot as 1.
+        log.warning("bin-blocked frame has no tracker column — cluster/dedup degraded",
+                    extra={"cols": list(blocked.columns)})
 
     df = blocked.copy()
     df = df[df[loc_col].notna() & (df[loc_col].astype(str).str.strip() != "")]
@@ -78,13 +91,18 @@ def compute_features(bundle: FetchBundle) -> Dict[str, Dict[str, Any]]:
     dedup_keys = [c for c in (loc_col, trk_col, bt_col) if c]
     df = df.drop_duplicates(subset=dedup_keys)
 
-    # block-age anchored to the newest block in the set (tz-robust: blockedTime is plant-local).
+    # Block-age is anchored to the actual RUN time, not merely the newest block —
+    # otherwise the freshest slot always reads age 0 and a systemic backlog (many old
+    # blocks with nothing new arriving) escapes the block-age signal entirely. The
+    # on-site LAN clock ≈ the plant-local blockedTime; if the clock is behind the data
+    # (tz skew) we fall back to the newest block so ages never go negative.
     ages = None
     as_of = None
     if bt_col:
         ts = pd.to_datetime(df[bt_col], errors="coerce")
-        as_of = ts.max()
-        if pd.notna(as_of):
+        newest = ts.max()
+        if pd.notna(newest):
+            as_of = max(newest, pd.Timestamp.now())
             ages = (as_of - ts).dt.total_seconds() / 3600.0  # hours old
     as_of_str = str(as_of) if as_of is not None and pd.notna(as_of) else ""
 

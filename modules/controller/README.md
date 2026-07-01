@@ -141,3 +141,8 @@ distribution helper in `scripts/analyze_controller_primary.py`.
 - **Meta-module chaining** — the `meta` cross-flag is the hook for Module 11 to correlate
   `controller saturation → network/shuttle degradation → bin blocks` compound failures.
 - As automation accumulates runs, the **trend** RUL and sustained-high penalty sharpen automatically.
+
+
+---
+
+> **Audit hardening (Session 12 — 2026-07-01).** The `cpu_idle` column is now **required** — if it is renamed/absent the run returns no components instead of defaulting idle to 0 and raising a false 100%-utilisation system-wide critical. `sql_share` is clamped to ≤1. Cold-start `confidence` tracks store depth, not CPU magnitude. See `docs/AUDIT_REPORT.md` and `docs/notebook/methodology.md §12` for the cross-cutting invariants.

@@ -168,13 +168,14 @@ every module (`core/registry.py`).
 
 ## 6. Validation (this session)
 
-Two `now-2d` runs on **live data** scored **334 components (271 scanners + 63 stations)** each
-(1,756 rows fetched, ~33–37 s/run):
+Two `now-2d` runs on **live data** scored **326 components (263 scanners + 63 stations)** each
+— the scanner universe is 272 in the feed minus the 9 decant/compaction devices now owned by
+Module 8 (see §1) — (1,756 rows fetched, ~33–37 s/run):
 
 - **Scanner misread, live:** the worst scanners are pick-station slot scanners — `GS030-SL02`
   = **53.3%** misread, `GS015-SL02` 51.1%, `GS055-SL01` 46.4%, `GS054-SL03` 28.8%, `GS008-SL01`
   25.6% — plus a **dead** `aisle_03_gtp_diverter` (**100%** no-read, 3,373 scans) → all **critical**.
-  Run 1: 14 critical / 15 warn / 41 watch / 201 ok scanners.
+  Run 1 (263 scanners after the decant/compaction exclusion): 14 critical / 15 warn / 41 watch / 193 ok.
 - **Station discrepancy, live:** `GS037` = 65 discrepancies (**+4.9σ** vs peers) → **warn**;
   `GS054`/`GS039`/`GS053`/`GS011`/`GS016`/`GS056` → **watch**; the other 56 stations **ok**.
 - **Cross-signal corroboration, live:** `GS054` and `GS056` are flagged as **both** a

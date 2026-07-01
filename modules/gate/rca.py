@@ -34,10 +34,12 @@ def build_rca(feat: Dict[str, Any], prior: Dict[str, Any], penalties: Dict[str, 
     stuck = feat.get("stuck_minutes", 0.0)
     consec = prior.get("consecutive_non_closed", 0)
     rate = prior.get("non_closed_rate", 0.0)
+    peer_z = prior.get("peer_z", 0.0)
+    aisle_common = feat.get("aisle") and feat.get("aisle_non_closed_count", 0) >= 3 and feat.get("is_non_closed")
 
     # Cross-module flag: many gates on one aisle non-closed together -> common cause.
     cross: List[Dict[str, str]] = []
-    if feat.get("aisle") and feat.get("aisle_non_closed_count", 0) >= 3 and feat.get("is_non_closed"):
+    if aisle_common:
         cross.append({
             "module": "network",
             "reason": f"{feat['aisle_non_closed_count']} gates on {feat['aisle']} are non-closed at once "
@@ -61,13 +63,20 @@ def build_rca(feat: Dict[str, Any], prior: Dict[str, Any], penalties: Dict[str, 
         elif top == "persistence":
             primary = f"Non-closed across {consec} consecutive runs — not returning to CLOSED"
         elif top == "stuck_recurrence":
-            primary = f"Repeatedly stuck across {prior.get('prior_stuck', 0)} prior runs"
+            primary = f"Repeatedly stuck — {prior.get('stuck_rate', 0.0):.0%} of {prior.get('runs_observed', 0)} runs"
         elif top == "open_request":
             primary = "Caught in OPEN REQUEST INITIATED (mid-actuation)"
-        elif top in ("non_closed_rate", "peer_z"):
-            primary = f"Non-closed in {rate:.0%} of runs — elevated vs peer gates"
+        elif top == "peer_z":
+            primary = f"Non-closed {peer_z:.1f}σ more than peer gates ({rate:.0%} of its runs)"
+        elif top == "non_closed_rate":
+            primary = f"Non-closed in {rate:.0%} of its runs (vs its own history)"
         else:
             primary = f"Gate {status}"
+    # A whole-aisle common cause is the dominant story — lead with it rather than
+    # blaming this one actuator.
+    if aisle_common:
+        primary = (f"{feat['aisle_non_closed_count']} gates on {feat['aisle']} non-closed at once "
+                   f"— likely a shared zone-controller/comms cause (this gate: {primary})")
 
     rca = {
         "summary": primary,

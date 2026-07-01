@@ -74,6 +74,10 @@ thresholds:
   aisle_breadth_cap: 40
 
   penalties:                      # weight · cap (points off 100)
-    breadth:     {weight: 16, cap: 48}   # per DISTINCT module flagged in the scope beyond the first (co-occurrence)
+    # weight 9/cap 45 keeps DISTINCT-module breadth increasing across breadth 2..6
+    # (9·1..9·5) instead of saturating at breadth 4 (the old 16·(b-1) hit its 48 cap
+    # at 4, so 4/5/6-module aisles were indistinguishable and all floored to 0/critical).
+    breadth:     {weight: 9,  cap: 45}   # per DISTINCT module flagged in the scope beyond the first (co-occurrence)
     chain:       {weight: 8,  cap: 24}   # per realized causal edge within the scope (flagged member -> flagged target module)
     persistence: {weight: 6,  cap: 24}   # per consecutive prior meta run this scope was a compound incident beyond 1 (store-driven)
+    meta_flag:   {weight: 18, cap: 18}   # a flagged member carries an explicit '-> meta' escalation (e.g. network aisle-downtime cluster) — surfaces it as >= watch even at breadth 1

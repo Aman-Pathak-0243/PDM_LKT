@@ -37,13 +37,26 @@ def _tier(score: float, t: Dict[str, float]) -> str:
     return "critical"
 
 
-def _penalties(f: Dict[str, Any], p: Dict[str, Any], peak_ref: float, buffer_normal: float) -> Dict[str, float]:
+def _penalties(f: Dict[str, Any], p: Dict[str, Any], peak_ref: float,
+               buffer_normal: float, idle_cfg: Dict[str, float]) -> Dict[str, float]:
+    # Stall detection: a seized belt shows ZERO congestion, so congestion penalties
+    # miss it entirely. Penalise a zone that sits idle far more than normal — but only
+    # when it is anomalous vs peers (idle_peer_z >= gate), so a plant-wide quiet period
+    # (all zones idle, z→0) never manufactures a false stall flag.
+    idle_normal = float(idle_cfg.get("idle_normal", 0.4))
+    idle_z_gate = float(idle_cfg.get("idle_z_gate", 1.0))
+    idle_excess = max(f.get("idle_share", 0.0) - idle_normal, 0.0)
+    stall_gate = 1.0 if f.get("idle_peer_z", 0.0) >= idle_z_gate else 0.0
     return {
         "congestion_excess": _capped(f.get("congestion_mean", 0.0) - 1.0, **p["congestion_excess"]),
         "severe_saturation": _capped(f.get("severe_saturation_share", 0.0), **p["severe_saturation"]),
         "peak_excess": _capped(f.get("congestion_peak", 0.0) - peak_ref, **p["peak_excess"]),
         "buffer_congestion": _capped(f.get("buffer_congestion_mean", 0.0) - buffer_normal, **p["buffer_congestion"]),
         "congestion_peer_z": _capped(f.get("congestion_peer_z", 0.0), **p["congestion_peer_z"]),
+        # Sustained (90th-pct) congestion catches a zone that runs high most of the
+        # window even when the mean lands modestly above 1.0.
+        "sustained_congestion": _capped(f.get("congestion_p90", 0.0) - 1.0, **p["sustained_congestion"]),
+        "stall_idle": _capped(idle_excess * stall_gate, **p["stall_idle"]),
     }
 
 
@@ -58,7 +71,12 @@ def _trend(history: List[Dict[str, Any]], score: float, min_runs: int):
     if len(pts) < min_runs:
         return None, False
     xs = np.array([p[0] for p in pts]); ys = np.array([p[1] for p in pts])
-    slope = np.polyfit(xs - xs.min(), ys, 1)[0]  # health per hour
+    if float(np.ptp(xs)) < 1e-9:      # identical timestamps -> polyfit would raise
+        return (0.0 if score <= CRITICAL_SCORE else None), True
+    try:
+        slope = np.polyfit(xs - xs.min(), ys, 1)[0]  # health per hour
+    except (np.linalg.LinAlgError, ValueError):
+        return (0.0 if score <= CRITICAL_SCORE else None), True
     if slope < -1e-4 and score > CRITICAL_SCORE:
         return min(float((score - CRITICAL_SCORE) / (-slope)), 24 * 365.0), True
     if score <= CRITICAL_SCORE:
@@ -74,11 +92,12 @@ def score(features: Dict[str, Dict[str, Any]], history: HistoryReader) -> List[C
     bands = t.get("ttm_bands_hours", {"critical": 24, "warn": 96, "watch": 336})
     peak_ref = float(t.get("peak_ref", 2.0))
     buffer_normal = float(t.get("buffer_normal", 0.3))
+    idle_cfg = t.get("idle", {"idle_normal": 0.4, "idle_z_gate": 1.0})
     min_runs = int(t.get("history_min_runs_for_trend", 5))
 
     out: List[ComponentHealth] = []
     for cid, f in features.items():
-        penalties = _penalties(f, pen_cfg, peak_ref, buffer_normal)
+        penalties = _penalties(f, pen_cfg, peak_ref, buffer_normal, idle_cfg)
         total = sum(penalties.values())
         health = max(0.0, 100.0 - total)
         tier = _tier(health, tiers)

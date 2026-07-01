@@ -82,6 +82,15 @@ def build_rca(
         "error_mix": dict(sorted(code_counts.items(), key=lambda kv: -kv[1])[:6]),
         "mechanical_share": feat.get("mechanical_share"),
         "share_of_total": feat.get("share_of_total"),
+        # Fault-timing context (not a penalty input — see README §2: it is shown to
+        # help triage, but rate is already scored by abs_rate/rate_peer_z so timing
+        # is not double-counted here). A collapsing median/min gap flags acceleration.
+        "fault_timing": {
+            "median_gap_hours": feat.get("median_gap_hours"),
+            "min_gap_hours": feat.get("min_gap_hours"),
+            "last_error_age_hours": feat.get("last_error_age_hours"),
+            "bad_tracker_events": feat.get("bad_tracker_events"),
+        },
         "cross_module_flags": cross,
     }
     return primary, rca

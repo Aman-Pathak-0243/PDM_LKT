@@ -74,13 +74,16 @@ def _trend(hist: List[Dict[str, Any]], score: float, min_runs: int):
     return None, True
 
 
-def _scanner_recurrence(hist: List[Dict[str, Any]], min_misread_pct: float) -> int:
-    """Prior runs whose MISREAD% was elevated — misread-specific, so peer-z/volume artifacts do not
-    self-reinforce into a compounding recurrence penalty."""
+def _scanner_recurrence(hist: List[Dict[str, Any]], min_misread_pct: float, min_vol: float = 0.0) -> int:
+    """Prior runs whose MISREAD% was elevated AND which had adequate scan volume — misread- and
+    volume-specific, so a low-scan device's noisy misread% cannot compound a recurrence penalty
+    that the (volume-gated) misread penalty deliberately suppresses."""
     n = 0
     for h in hist:
         m = h.get("metrics_json") or {}
         try:
+            if float(m.get("total_scans") or 0.0) < min_vol:
+                continue
             if float(m.get("misread_pct") or 0.0) >= min_misread_pct:
                 n += 1
         except (TypeError, ValueError):
@@ -114,7 +117,10 @@ def _score_scanner(feat, hist, sc_cfg, tiers, conf_cfg, bands, min_runs) -> Comp
     total = float(feat.get("total_scans", 0))
     misread_pct = float(feat.get("misread_pct", 0.0))
     vol_factor = min(1.0, total / min_vol) if min_vol > 0 else 1.0
-    recurrence = _scanner_recurrence(hist, recur_min_misread)
+    # Recurrence only counts prior runs that had adequate volume, matching the
+    # volume-gate on the misread penalty (a noisy low-scan run must not accumulate
+    # recurrence points the misread gate suppresses).
+    recurrence = _scanner_recurrence(hist, recur_min_misread, min_vol)
     # peer_z only bites with enough volume AND a materially-elevated misread, so a clean decant
     # diverter sitting slightly above a tight fleet median is never flagged.
     peer_z_eff = feat.get("misread_peer_z", 0.0) if (total >= min_vol_peer and misread_pct >= peer_z_min_misread) else 0.0

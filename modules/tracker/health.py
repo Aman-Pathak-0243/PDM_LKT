@@ -41,7 +41,11 @@ def _tier(score: float, t: Dict[str, float]) -> str:
 
 def _penalties(f: Dict[str, Any], p: Dict[str, Any], recurrence_runs: int) -> Dict[str, float]:
     return {
-        "cluster": _capped(f.get("bad_count", 0), **p["cluster"]),
+        # Disjoint stale vs recent so the SAME tote is not penalised twice: cluster
+        # scores the older (stale) stuck totes, recent_cluster scores active ones.
+        # peer_z (a deviation signal, capped modestly) then layers on top rather than
+        # re-counting the cluster a third time.
+        "cluster": _capped(f.get("bad_count", 0) - f.get("recent_bad_count", 0), **p["cluster"]),
         "recent_cluster": _capped(f.get("recent_bad_count", 0), **p["recent_cluster"]),
         "recurrence": _capped(recurrence_runs, **p["recurrence"]),
         "multi_shuttle": _capped(f.get("distinct_shuttles", 0) - 1, **p["multi_shuttle"]),
@@ -61,7 +65,12 @@ def _trend(history: List[Dict[str, Any]], score: float, min_runs: int):
     if len(pts) < min_runs:
         return None, False
     xs = np.array([p[0] for p in pts]); ys = np.array([p[1] for p in pts])
-    slope = np.polyfit(xs - xs.min(), ys, 1)[0]  # health per hour
+    if float(np.ptp(xs)) < 1e-9:      # identical timestamps -> polyfit would raise
+        return (0.0 if score <= CRITICAL_SCORE else None), True
+    try:
+        slope = np.polyfit(xs - xs.min(), ys, 1)[0]  # health per hour
+    except (np.linalg.LinAlgError, ValueError):
+        return (0.0 if score <= CRITICAL_SCORE else None), True
     if slope < -1e-4 and score > CRITICAL_SCORE:
         return min(float((score - CRITICAL_SCORE) / (-slope)), 24 * 365.0), True
     if score <= CRITICAL_SCORE:

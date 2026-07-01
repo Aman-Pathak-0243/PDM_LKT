@@ -171,3 +171,31 @@ longitudinal signal.
 - All features are stored (`metrics_json`) so future AI/ML — regression RUL,
   anomaly models, embeddings, cross-module compound-failure detection — can be
   layered on the accumulated history without re-fetching.
+
+## 12. Audit-hardened invariants (Session 12)
+
+A full correctness/methodology/RCA audit (`docs/AUDIT_REPORT.md`) established five
+invariants every module now upholds — check them when adding or tuning a module:
+
+1. **Confidence reflects evidence, not severity.** Cold-start `confidence` is a
+   function of store depth (prior runs observed), never of how bad the current
+   reading is, and is capped at ~0.85. A loud single snapshot on no history is
+   *low* confidence — honest about uncertainty (§8).
+2. **No raw counts drive penalties.** Penalties are built from rates, ratios,
+   robust z-scores, binary states, or **volume-gated** intensities. A count that
+   grows with usage/history (errors today, prior stuck runs, misreads) is converted
+   to a rate or gated so a busy/old unit is not penalised merely for volume.
+3. **Trend fits are crash-safe.** Every `np.polyfit` health-trajectory fit is
+   guarded against zero time-spread (identical snapshot timestamps) and wrapped so a
+   numeric failure falls back to cold-start instead of failing the whole run.
+4. **Percentages are physically bounded.** Downtime %, utilisation %, and shares are
+   clamped to their real ranges at the point of computation, so a source artefact
+   (e.g. a divide-by-tiny-elapsed) can never surface an impossible value or RCA text.
+5. **Peer-deviation never double-counts the absolute signal**, and is gated by an
+   absolute floor so a unit that is merely "relatively worst" among a benign
+   population is not flagged.
+
+These sit alongside the store-overcomes-2-days design (§4): the leading indicator
+for current-state assets is still **anomaly + recurrence + persistence** accrued in
+the store, but the *first-detection* signals (block-age, stuck-minutes, a stalled
+zone vs peers) are now robust enough to flag a genuine fault on run one.

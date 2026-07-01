@@ -44,28 +44,6 @@ def _archive_dir() -> Path:
     return d
 
 
-def build_filters(
-    table: str,
-    date_from: Optional[str] = None,
-    date_to: Optional[str] = None,
-    trigger_id: Optional[str] = None,
-    module: Optional[str] = None,
-) -> Dict[str, Any]:
-    filters: Dict[str, Any] = {}
-    col = DATE_COL.get(table)
-    if col and date_from:
-        filters[col] = (">=", date_from)
-    if col and date_to:
-        # If both bounds given, combine via two-pass (storage supports one op/col),
-        # so we encode the upper bound by post-filtering in the caller when needed.
-        filters.setdefault(col, (">=", date_from or ""))
-    if trigger_id and "trigger_id" in TABLE_SCHEMAS[table].column_names:
-        filters["trigger_id"] = trigger_id
-    if module and "module" in TABLE_SCHEMAS[table].column_names:
-        filters["module"] = module
-    return filters
-
-
 def _select(table: str, date_from, date_to, trigger_id, module) -> List[Dict[str, Any]]:
     storage = get_storage()
     col = DATE_COL.get(table)
@@ -78,7 +56,14 @@ def _select(table: str, date_from, date_to, trigger_id, module) -> List[Dict[str
         filters[col] = (">=", date_from)
     rows = storage.select(table, filters or None)
     if col and date_to:  # upper bound applied in Python (one op/col limit)
-        rows = [r for r in rows if (r.get(col) or "") <= date_to]
+        # Inclusive upper bound. Stored timestamps are full ISO-8601, so a bare
+        # 'YYYY-MM-DD' date_to must be compared on the row's date prefix, else
+        # every row timestamped later that same day is silently dropped.
+        if len(date_to.strip()) <= 10:
+            cutoff = date_to.strip()
+            rows = [r for r in rows if (r.get(col) or "")[:10] <= cutoff]
+        else:
+            rows = [r for r in rows if (r.get(col) or "") <= date_to]
     return rows
 
 
@@ -148,10 +133,12 @@ def delete(
     rows = _select(table, date_from, date_to, trigger_id, module)
     deleted = 0
     schema = TABLE_SCHEMAS[table]
-    if "id" in schema.column_names:  # delete precisely by id
+    if "id" in schema.column_names:  # delete precisely by id (one batched rewrite)
         ids = [r["id"] for r in rows if r.get("id") is not None]
-        for rid in ids:
-            deleted += storage.delete(table, {"id": rid})
+        # Single set-membership delete rewrites the file once, holding the table
+        # lock once — a per-id loop would rewrite the whole CSV per row (O(N*size))
+        # and block concurrent runs for the whole batch.
+        deleted = storage.delete(table, {"id": ("in", set(ids))}) if ids else 0
     else:
         # No surrogate key (e.g. automation_config) — delete by the given filters.
         filt: Dict[str, Any] = {}
@@ -182,9 +169,18 @@ def archive(table: str, before: str) -> Dict[str, Any]:
     path = _archive_dir() / f"{table}_before_{before[:10]}_{ts}.csv"
     pd.DataFrame(old, columns=TABLE_SCHEMAS[table].column_names).to_csv(path, index=False)
     deleted = 0
-    if "id" in TABLE_SCHEMAS[table].column_names:
-        for r in old:
-            deleted += storage.delete(table, {"id": r["id"]})
+    schema = TABLE_SCHEMAS[table]
+    if "id" in schema.column_names:
+        ids = [r["id"] for r in old if r.get("id") is not None]
+        deleted = storage.delete(table, {"id": ("in", set(ids))}) if ids else 0
+    else:
+        # No surrogate id (e.g. automation_config) — delete the archived rows by
+        # their primary key, else they stay in the active store and restore duplicates.
+        pk_cols = [c.name for c in schema.columns if c.pk]
+        if pk_cols:
+            key = pk_cols[0]
+            vals = [r.get(key) for r in old if r.get(key) is not None]
+            deleted = storage.delete(table, {key: ("in", set(vals))}) if vals else 0
     record_event(
         "storage_archive", level="WARNING", source="storage",
         detail={"table": table, "archived": deleted, "before": before, "file": str(path)},
