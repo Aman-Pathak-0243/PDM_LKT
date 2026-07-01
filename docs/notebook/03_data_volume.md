@@ -311,4 +311,37 @@ into compound-failure detection. Across all ten modules a single "Run all" write
 still comfortably within the CSV store, with archive/delete-by-range to cap footprint and the
 `(module, component_id, created_at)` index keeping trend/RUL queries fast under MySQL later.
 
-*(Subsequent sessions append their module's fetch volumes + write footprint here.)*
+## Fetch volume — SYSTEM-WIDE ANOMALY (META) — **no fetch**
+
+| Source | Rows read | Notes |
+|--------|----------:|-------|
+| PdM store `component_health` (latest per component) | **~770** | **No Grafana call.** Reads the latest verdict of every other module from the store (~0.3 s). |
+
+Meta is the only module with **no Grafana fetch** — it reads the store (`latest_per(component_health)`),
+correlates in-memory, and writes back. The "fetch" is a fast in-process store read (~0.3 s for ~770
+components), independent of any dashboard or window.
+
+## Write footprint — per PdM run (META)
+
+`component_health` = **7 rows/run** (6 aisles + system; the aisle roster is dynamic = observed aisles),
+≈ 1–2 KB/row (rca_json carries the flagged-member list + chain edges). Plus 1 `pdm_run`, 1 `trigger_log`,
+1 `panel_catalog` upsert, ~1–2 `event_log`.
+
+| Automation interval | component_health rows/day (meta, 7) | growth/day | per year |
+|---------------------|-----------:|-----------:|---------:|
+| hourly | 168 | ~0.25 MB | ~0.09 GB |
+| every 15 min | 672 | ~1 MB | ~0.35 GB |
+
+Meta is a tiny writer, but its rows are the **system's compound-risk trend** — the store lets it detect a
+compound incident **persisting** across runs (its recurrence signal). Because it reads (not re-fetches) the
+other modules' verdicts, it adds cross-module insight at near-zero fetch cost.
+
+## Whole-system footprint (all 11 modules)
+
+A single "Run all" writes ≈ **16 + 124 + 6 + ~54 + 52 + ~40 + ~326 + 19 + 124 + 1 + 7 ≈ 769**
+`component_health` rows across the **11 modules** (Lift, Shuttle, Conveyor, Tracker, Gate, Bin, GTP,
+Decant, Network, Controller, Meta). Hourly automation ≈ 18,000 rows/day — comfortably within the CSV store,
+with the Storage page's archive/delete-by-range to cap footprint and the `(module, component_id,
+created_at)` index keeping trend/RUL queries fast under MySQL later. **The module set is complete (11/11).**
+
+*(End of the data-volume chapter — the notebook is complete.)*

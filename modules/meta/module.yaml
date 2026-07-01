@@ -1,0 +1,79 @@
+# =============================================================================
+# SYSTEM-WIDE ANOMALY LAYER (META) module — Module 11, the FINAL module.
+# Produced 2026-07-01. Unlike the ten equipment/infra modules, this one has NO Grafana source:
+# it is a CORRELATION LAYER over the PdM store (component_health + rca_json.cross_module_flags
+# persisted by Modules 1-10). Its job is to surface COMPOUND failure chains that no single module
+# sees — e.g. "controller saturation -> network downtime -> shuttle errors -> bin blocks on the same
+# aisle" -> a likely common cause worth one investigation instead of ten separate flags.
+#
+# NO FETCH: every mapped §11 candidate (Aggregate Error Report, QUADRON ERROR HISTORY, Quadron Alerts,
+#   Quadron Network status, CPU Stats) is already OWNED by another module (Network=Quadron Network
+#   status, Controller=CPU Stats, Shuttle=QUADRON ERROR HISTORY, Gate/Shuttle=Quadron Alerts) or was
+#   DROPPED as redundant (Aggregate Error Report = shuttle_error UNION lift_error, covered by Shuttle+Lift).
+#   Re-fetching them would double-count. So meta reads ONLY the store. is_configured() is overridden to
+#   True (no dashboards); fetch() ignores the Grafana session and reads get_storage().latest_per(...).
+#
+# META COMPONENTS = 6 ASRS aisles (dynamic: the observed metrics_json.aisle values) + 1 'system' scope.
+#   AISLE scope: correlates the flagged components whose authoritative metrics_json.aisle == the aisle
+#     (lift, shuttle, tracker, gate, bin_mech, network, + decant infeed diverters).
+#   SYSTEM scope: the controller compute node + the non-aisle areas (GTP stations/scanners, decant
+#     stations, conveyor zones) + a breadth signal (how many aisles are themselves compound incidents).
+#
+# COMPOUND-RISK score (NOT a re-tally of member health -> avoids double-counting): a scope starts at 100
+#   and loses points for BREADTH (distinct modules flagged in it), worst-tier SEVERITY, realized causal
+#   CHAIN edges (a flagged member's cross_module_flags whose target module is ALSO flagged in the scope),
+#   and cross-run PERSISTENCE; the system scope adds a controller-trigger + a count of compound aisles.
+#   A single module flagging an aisle is NOT a meta incident (that module already owns it); TWO+ modules
+#   co-occurring, especially with a realized chain, IS -> genuinely new, cross-module information.
+#
+# SURFACED on the generic /module/meta page (ranked incidents worst-first + in-page Methodology) and as a
+#   tile on Overview. No core/ or webapp changes (plugin rule).
+# =============================================================================
+module: meta
+title: System-Wide Anomaly (Meta) PdM
+component_type: incident_scope
+description: >-
+  The system-wide anomaly layer. A correlation layer over the PdM store (no Grafana fetch): it reads the
+  latest scored components of every other module and their cross-module flags, and correlates them by
+  aisle (+ a system scope) into ranked compound-risk incidents. It scores co-occurrence and realized
+  causal chains (not a re-tally of member health), surfacing compound failures with a likely common cause.
+
+default_window: now-2d           # window is nominal; meta reads the store, not a time-filtered feed
+anchor_to_data_asof: false
+
+# ---- Data source: the PdM store (no Grafana) --------------------------------
+store_source:
+  table: component_health
+  reads: latest row per (module, component_id), excluding module='meta'
+  correlates: [risk_tier, health_score, primary_cause, rca_json.cross_module_flags, metrics_json.aisle]
+
+cross_module_notes:
+  - Reads (does not write) the other 10 modules' verdicts. Registered LAST so a "Run all" trigger has the
+    other modules persist their fresh rows BEFORE meta correlates them (same-trigger correlation).
+  - The explicit '-> meta' cross-flags emitted by controller (system-wide throttle) and network (aisle
+    downtime cluster) are first-class meta signals; the rest of the cross-module graph (network->shuttle,
+    tracker->shuttle/lift, gate->network, bin->shuttle, shuttle->network/tracker, lift->network) supplies
+    the realized-chain edges within a scope.
+  - Aisle key = the authoritative metrics_json.aisle (NOT parsed from arbitrary component_ids), so exactly
+    the ASRS-aisle modules (+ decant infeed diverters) map to aisles; GTP/decant-stations/conveyor/controller
+    have no aisle -> the system scope.
+
+# ---- Scoring thresholds (compound-risk penalty model; see health.py) ---------
+thresholds:
+  history_min_runs_for_trend: 5   # >= this many prior meta snapshots -> 'trend' regime
+  tiers: {ok: 85, watch: 65, warn: 40}
+  ttm_bands_hours: {critical: 24, warn: 96, watch: 336}   # a compound incident escalates fast
+  confidence:
+    coldstart_base: 0.50
+    trend_base: 0.72
+
+  severity_by_tier: {critical: 18, warn: 8, watch: 2, ok: 0}   # worst flagged member's tier -> points
+  # System scope only:
+  controller_trigger_by_tier: {critical: 30, warn: 15, watch: 5, ok: 0}
+  compound_aisle_weight: 10       # per aisle that is itself a compound incident (>=2 modules flagged) — cap via aisle_breadth
+  aisle_breadth_cap: 40
+
+  penalties:                      # weight · cap (points off 100)
+    breadth:     {weight: 16, cap: 48}   # per DISTINCT module flagged in the scope beyond the first (co-occurrence)
+    chain:       {weight: 8,  cap: 24}   # per realized causal edge within the scope (flagged member -> flagged target module)
+    persistence: {weight: 6,  cap: 24}   # per consecutive prior meta run this scope was a compound incident beyond 1 (store-driven)

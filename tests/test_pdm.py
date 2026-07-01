@@ -487,3 +487,76 @@ def test_controller_sustained_high_and_scalable():
     assert set(fm) == {"ctrl_a", "ctrl_b"}
     comps = {c.component_id: c for c in csc(fm, _NoHistory())}
     assert comps["ctrl_a"].risk_tier == "ok" and comps["ctrl_b"].risk_tier == "critical"
+
+
+# --------------------------- meta model (Module 11) --------------------- #
+def _mc(module, cid, tier, aisle=None, flags=None, health=50.0, cause="x"):
+    metrics = {"aisle": aisle} if aisle else {}
+    return {"module": module, "component_id": cid, "component_type": module, "risk_tier": tier,
+            "health_score": health, "primary_cause": cause,
+            "rca": {"cross_module_flags": flags or []}, "metrics": metrics}
+
+
+def _meta_bundle(components):
+    return FetchBundle(frames={"components": components}, rows_fetched=len(components), panels=[],
+                       notes={"window": "now-2d"})
+
+
+def test_meta_correlation_compound_chain_and_no_double_count():
+    from modules.meta.features import compute_features as mcf
+    from modules.meta.health import score as msc
+
+    comps = [
+        # aisle_01: network critical (->shuttle) + shuttle warn (->network) -> compound, realized chain
+        _mc("network", "QD_Shuttle_01_19", "critical", "aisle_01",
+            [{"module": "shuttle", "reason": "comms->pick"}, {"module": "meta", "reason": "cluster"}], 13.0),
+        _mc("shuttle", "QD_Shuttle_01_05", "warn", "aisle_01", [{"module": "network", "reason": "servo"}], 55.0),
+        # aisle_02: single flagged module -> NOT a compound incident (must stay ok = no double-count)
+        _mc("bin_mech", "002-04-1-221-1-02", "critical", "aisle_02", [{"module": "shuttle"}], 20.0),
+        # aisle_05: a healthy member -> ok
+        _mc("shuttle", "QD_Shuttle_05_02", "ok", "aisle_05", [], 95.0),
+        # system: controller saturated
+        _mc("controller", "db_controller", "critical", None, [{"module": "meta", "reason": "throttle"}], 20.0),
+    ]
+    feats = mcf(_meta_bundle(comps))
+    res = {c.component_id: c for c in msc(feats, _NoHistory())}
+
+    # compound aisle with a realized chain -> warn/critical
+    assert res["aisle_01"].risk_tier in ("warn", "critical")
+    assert res["aisle_01"].metrics["breadth"] == 2 and res["aisle_01"].metrics["chain_edge_count"] >= 1
+    # a single flagged module is that module's own problem, NOT a meta incident
+    assert res["aisle_02"].risk_tier == "ok" and res["aisle_02"].metrics["breadth"] == 1
+    assert res["aisle_05"].risk_tier == "ok"
+    # system scope: controller trigger fires; it sees the compound aisle_01
+    assert res["system"].risk_tier in ("warn", "critical")
+    assert res["system"].metrics["penalties"]["controller_trigger"] > 0
+    assert "aisle_01" in res["system"].metrics["compound_aisles"]
+    # worst-first ordering + component type
+    ordered = msc(feats, _NoHistory())
+    assert ordered[0].health_score <= ordered[-1].health_score
+    assert ordered[0].component_type == "incident_scope"
+
+
+def test_meta_persistence_escalates():
+    from modules.meta.features import compute_features as mcf
+    from modules.meta.health import score as msc
+
+    class _Hist:
+        def component_history(self, module, cid, limit=400):
+            if cid == "aisle_01":
+                return [{"created_at": now_iso(), "health_score": 50.0,
+                         "metrics_json": {"breadth": 2}} for _ in range(4)]
+            return []
+
+        def run_count(self, module):
+            return 4
+
+    comps = [
+        _mc("network", "QD_Shuttle_01_19", "critical", "aisle_01", [{"module": "shuttle"}], 13.0),
+        _mc("shuttle", "QD_Shuttle_01_05", "warn", "aisle_01", [{"module": "network"}], 55.0),
+    ]
+    feats = mcf(_meta_bundle(comps))
+    cold = {c.component_id: c for c in msc(feats, _NoHistory())}["aisle_01"]
+    recur = {c.component_id: c for c in msc(feats, _Hist())}["aisle_01"]
+    assert recur.metrics["consecutive_compound"] == 5
+    assert recur.health_score < cold.health_score

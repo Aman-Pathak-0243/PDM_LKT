@@ -374,4 +374,27 @@ feature extractor keys by a host/node column if the proc ever returns per-host r
 | JIT Frame Unallocated | `fP9A7Y0Hk` | `#2` = `select … from sales_order_line where jit_flag='true' and category='FRAME'` — **JIT order frames (inventory)**, not compute. Spurious keyword match. |
 | OPC - GTP/Lift Datalogger | `3HJAGPbVk` / `SBaBnPb4z` | Raw per-device OPC telemetry (`device_id, value, timestamp`) — no CPU/memory, no CSV. Candidate **future** per-host source. |
 
-*(Subsequent sessions append their module's dashboard sections here.)*
+## Session 11 — SYSTEM-WIDE ANOMALY (META) module — **NO Grafana source**
+
+Resolved 2026-07-01. The final module has **no dashboard** — it is a **correlation layer over the PdM
+store** (`component_health` + `rca_json.cross_module_flags` from Modules 1–10). All mapped §11 candidates
+are already owned by other modules or dropped, so re-fetching any would double-count.
+
+| "Source" | What it provides | Verdict |
+|----------|------------------|---------|
+| PdM store `component_health` | latest row per `(module, component_id)` (excluding `module='meta'`): each module's tier, health, primary_cause, cross-module flags, and `metrics.aisle` | **PRIMARY (store).** Correlated by aisle (+ system) into compound-risk incidents. No Grafana call. |
+
+**Mapped §11 candidates — all resolved, none fetched:**
+| Candidate | Status |
+|-----------|--------|
+| Quadron Network status (`gL0OBnq7z`) | **Owned by Network (Module 9)** — per-shuttle comms uptime. |
+| CPU Stats (`CwTEp_GSz`) | **Owned by Controller (Module 10)** — CPU utilization. |
+| QUADRON ERROR HISTORY (`K2QzauWVz`) | **Owned by Shuttle (Module 2)** — shuttle_error. |
+| Quadron Alerts (`VxY5Zls7z`) | **Owned by Gate/Shuttle** — free-text alerts. |
+| Aggregate Error Report (`DaVyCb9Hz`) | **Dropped (redundant)** — `shuttle_error ∪ lift_error` keyed by robot_id, covered by Shuttle + Lift (dropped in Sessions 4/6). |
+
+So meta reads the store only; `is_configured()` is overridden to `True` (no dashboards) and it is
+registered LAST so a "Run all" correlates the same trigger's fresh per-module verdicts. This completes the
+dashboard inventory — **11/11 modules resolved**.
+
+*(The module set is complete. This chapter is the human-readable twin of `panel_catalog`.)*

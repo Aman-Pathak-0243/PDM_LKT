@@ -22,8 +22,9 @@ from modules import gtp_station  # noqa: E402,F401
 from modules import decant_station  # noqa: E402,F401
 from modules import network  # noqa: E402,F401
 from modules import controller  # noqa: E402,F401
+from modules import meta  # noqa: E402,F401  — registered LAST: correlates the other modules' fresh results
 
-# from modules import meta   # next session (Module 11, System-Wide Anomaly Layer)
+# Module set COMPLETE (11/11 — the mapping's build sequence ends at the meta layer).
 
 __all__ = ["lift", "shuttle", "conveyor", "tracker", "gate", "bin_mech", "gtp_station",
-           "decant_station", "network", "controller"]
+           "decant_station", "network", "controller", "meta"]

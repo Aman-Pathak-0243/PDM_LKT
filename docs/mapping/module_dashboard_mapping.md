@@ -267,19 +267,30 @@ the WES → a **system-wide throttle** cross-feature (RCA flags `meta`). Impleme
 
 ---
 
-## 11. System-Wide Anomaly Layer (Meta-Module)
-**Sub-component:** Cross-system / compound failures
+## 11. System-Wide Anomaly Layer (Meta-Module)  ✅ BUILT (Session 11, FINAL) — NO GRAFANA SOURCE
+**Sub-component:** cross-system / compound failures. Component = an `incident_scope`; universe = the
+**6 ASRS aisles** (dynamic = observed `metrics_json.aisle`) **+ 1 `system` scope** = 7.
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | Aggregate Error Report | Maintenance | All-component error aggregation |
-| Primary | QUADRON ERROR HISTORY | Quadron | Long-horizon multi-asset error log |
-| Secondary | Quadron Alerts | Quadron | Active alert state |
-| Secondary | Quadron Network status | Maintenance | Comms degradation chain trigger |
-| Secondary | CPU Stats | CPU Utilization | Compute degradation chain trigger |
+| Role | Source | What it provides | Verified |
+|------|--------|------------------|----------|
+| Primary | **PdM store** `component_health` (not Grafana) | latest verdict per `(module, component_id)` (excl. `meta`) + `rca.cross_module_flags` + `metrics.aisle`, correlated by aisle/system into compound-risk incidents | ✅ 771 components → 7 scopes, ~0.3 s |
 
-**Signal type:** Cross-correlation of all modules → compound failure chains (e.g. network degradation → shuttle errors → bin blocks).
-**Build priority:** 11 (build last, once individual modules exist).
+**Signal type:** cross-module **correlation** — compound-risk = module **co-occurrence** (breadth) +
+realized **causal chains** (a flagged member whose cross-flag names another flagged module in the scope) +
+**persistence** + (system) controller-trigger + compound-aisle breadth. Surfaces `controller → network →
+shuttle → bin` chains as one ranked incident. Implemented in `modules/meta/` (no `core/` edits).
+
+> **RESOLUTION (Session 11):** the mapping listed 5 candidate dashboards, but re-verifying shows all are
+> **already owned** by other modules — **Quadron Network status** → Network (§9), **CPU Stats** →
+> Controller (§10), **QUADRON ERROR HISTORY** → Shuttle (§2), **Quadron Alerts** → Gate/Shuttle — or were
+> **dropped as redundant** (**Aggregate Error Report** = `shuttle_error ∪ lift_error` keyed by robot_id,
+> covered by Shuttle + Lift; dropped in Sessions 4/6). Re-fetching any would **double-count**. So the
+> meta-module fetches **NOTHING** — it is a pure **correlation layer over the store** (the cross-module
+> flags the other ten modules already emit). It avoids double-counting by scoring co-occurrence + chains,
+> not by re-tallying member health; a lone flagged module leaves its aisle `ok`. `is_configured()`→True
+> (no dashboards); registered LAST so "Run all" correlates the same-trigger verdicts.
+
+**Build priority:** 11 (last). **Built — the module set is COMPLETE (11/11).**
 
 ---
 

@@ -19,10 +19,13 @@ rate + 10 decant stations on status/throughput with no live discrepancy feed; re
 scan devices out of Module 7 so each device is owned by exactly one module, live data), and
 **Module 9: Network / Comms** (per-shuttle comms link — 124 links scored on network downtime% from
 Quadron Network status, with a today-vs-window recency spike, aisle-clustering, and cross-feature
-flags into Shuttle + the meta layer, live data), and **Module 10: Controller / Compute** (the
+flags into Shuttle + the meta layer, live data), **Module 10: Controller / Compute** (the
 controller compute node — CPU utilization% from CPU Stats, current-state so the store provides
-sustained-high + trend, with a system-wide `meta` cross-flag, live data) are complete. See
-[`pdm_notebook.md`](pdm_notebook.md) for the full book and
+sustained-high + trend, with a system-wide `meta` cross-flag, live data), and **Module 11:
+System-Wide Anomaly (Meta)** (the final module — a store-only correlation layer, no Grafana fetch,
+scoring per-aisle + system **compound-risk** from module co-occurrence + realized causal chains +
+persistence over the other modules' verdicts and cross-flags) are complete — **the module set is
+now COMPLETE (11/11)**. See [`pdm_notebook.md`](pdm_notebook.md) for the full book and
 [`CLAUDE.md`](CLAUDE.md) for durable conventions.
 
 ---
@@ -49,7 +52,7 @@ process. Open `http://<host-ip>:8800`.
 
 - **Overview** — one tile per module (worst-component status, last run). Pick a
   **window** (top-right) and **Run PdM (all)**, or run a single module from its tile.
-- **Per-module page** (`/module/lift`, `/module/shuttle`, `/module/conveyor`, `/module/tracker`, `/module/gate`, `/module/bin_mech`, `/module/gtp_station`, `/module/decant_station`, `/module/network`, `/module/controller`) —
+- **Per-module page** (`/module/lift`, `/module/shuttle`, `/module/conveyor`, `/module/tracker`, `/module/gate`, `/module/bin_mech`, `/module/gtp_station`, `/module/decant_station`, `/module/network`, `/module/controller`, `/module/meta`) —
   per-component health, risk tier, predicted time-to-maintenance, confidence, regime; click
   a row for RCA + health trend; optional "Mark maintenance done". Each page has an in-page
   **Methodology** section explaining how a component's verdict and the module's overall
@@ -88,7 +91,9 @@ application-logic changes.
 core/      config, structured logging, Grafana auth/fetch/inspect, storage
            abstraction (CSV active / MySQL dormant), module registry, runner,
            scheduler, audit.
-modules/   one self-registering plugin per equipment type (lift, shuttle, conveyor, tracker, gate, bin_mech, gtp_station, decant_station, network, controller).
+modules/   one self-registering plugin per equipment type (lift, shuttle, conveyor, tracker, gate,
+           bin_mech, gtp_station, decant_station, network, controller, meta) — 11/11, set complete.
+           meta is a store-only correlation layer (no Grafana source).
 webapp/    FastAPI app, JSON API, services, exporting, templates, static.
 db/        MySQL schema (designed).
 docs/      the PdM book (notebook chapters + mapping).
