@@ -135,24 +135,44 @@ our store) + peer deviation → slot/rail degradation (not random). Implemented 
 > **CORRECTION (Session 3):** the mapping listed **Discrepancy Report Events** as conveyor
 > "jam/misroute per zone". Live SQL shows it is **GTP-station pick verification**
 > (`verification_events`: station/operation_type/type/discrepancy_type) keyed by **station**,
-> not zone — **reassigned to Module 7 (GTP Station + Scanner)**. Grafana exposes no discrete
+> not zone — **reassigned to Module 7 (GTP Station + Scanner)**, which is now **built (Session 7)**
+> and owns it (the `.env` key moved `CONVEYOR__ → GTP_STATION__`). Grafana exposes no discrete
 > conveyor jam-event feed, so conveyor health uses congestion (the observable symptom).
 
 ---
 
-## 7. GTP Station + Scanner PdM
-**Sub-component:** GTP pick stations + barcode scanners
+## 7. GTP Station + Scanner PdM  ✅ BUILT (Session 7) — RESOLVED BY LIVE INSPECTION
+**Sub-components:** GTP barcode **scanners** (272, `gtp_scanner`) **and** GTP pick **stations**
+(63, `gtp_station` — `GS001..GS063`). First module scoring **two component types** in one plugin.
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | GTP Scanner logs | GTP | Scan attempts / misreads (key leading indicator) |
-| Primary | GTP Station Information | GTP | Station uptime/downtime, status |
-| Secondary | Live GTP Summary | GTP | Real-time station throughput |
-| **Primary** | Discrepancy Report Events (`D6sQle2Vz`) | GTP | **Per-station pick discrepancies** `verification_events`: `station, operation_type, type, discrepancy_type, create_time` (≈17.8k current rows) — *reassigned here from Conveyor in Session 3* |
-| Secondary | GTP Stations | GTP | Station master / config reference |
+| Role | Dashboard | Folder | What it provides | Verified |
+|------|-----------|--------|------------------|----------|
+| Primary (scanner) | GTP Scanner logs (`pK7-8NmVz`) | GTP | `#8` "Scanner Read /No read Data" `scanner, ReadCount, NoReadCount, efficiency` → per-scanner **misread rate** (NoRead/(Read+NoRead)); the scanner universe | ✅ 272 scanners, windowed |
+| Secondary (volume) | GTP Scanner logs | GTP | `#4` "Scanner Hits" `scanner, hits` (usage/volume) | ✅ 272 rows |
+| Primary (station) | Discrepancy Report Events (`D6sQle2Vz`) | GTP | `#2` `verification_events` (time-filtered) `station, operation_type, type, discrepancy_type, create_time` → per-station **pick-verification discrepancy rate** | ✅ ~1,150 rows/2d, 47/63 stations |
+| Primary (roster) | GTP Stations (`GlGBwgY4z`) | GTP | `#2` "Station Summary" `id, Type, operation_type, active_status(Active/Inactive), updated_on` → 63-station roster + status | ✅ 63 stations |
 
-**Signal type:** Scanner misread-rate trend + station downtime pattern → scanner/station hardware failure.
-**Build priority:** 7 — anomaly detection, quick win.
+**Signal type:** scanner **misread rate** (volume-gated) + peer/recurrence/trend; station
+pick-**discrepancy rate** (peer deviation dominant, isolating station-specific degradation from
+plant-wide inventory shorts) + recurrence/trend + low-weight offline-persistence. active_status
+is context. A `GS<NN>-SL<NN>` scanner is the pick-station scanner → RCA cross-links a station to
+its slot scanner. Implemented in `modules/gtp_station/`.
+
+> **CORRECTION 1 (Session 7):** the mapping listed **GTP Station Information** (`j-fIgfqnk`) as
+> "station uptime/downtime, status" and **Live GTP Summary** (`j_cdWK_7z`) as "real-time station
+> throughput". Live SQL shows both are **pendency/inventory** (remaining_quantity/lines/skus,
+> wave/outbound) — **operational state, not health**. **Both dropped.** The real scanner-misread
+> signal is **GTP Scanner logs `#8`** (a per-scanner Read/NoRead table the mapping did not single
+> out); a `scanner_events` (`N6tdd2aSz`) dashboard the mapping never listed backs it (per-tote
+> drill-down, not a population source).
+>
+> **CORRECTION 2 (Session 7):** **Discrepancy Report Events** (`D6sQle2Vz`) — reassigned here from
+> Conveyor in Session 3 — is confirmed `verification_events` keyed by **station** (the station
+> primary). Its `.env` key moved `CONVEYOR__ → GTP_STATION__`. **GTP Throughput v2** (`ZR7Z2FR4z`)
+> per-scanner/station hit-rate timeseries is a documented **future secondary** (per-run trend
+> already accrues in our store).
+
+**Build priority:** 7 — anomaly detection, quick win. **Built.**
 
 ---
 

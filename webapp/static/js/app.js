@@ -165,7 +165,7 @@
       ]),
     ]);
     tr.after(detail); openDetail = detail;
-    const hist = await api(`/api/modules/${module}/components/${c.component_id}/history`);
+    const hist = await api(`/api/modules/${module}/components/${encodeURIComponent(c.component_id)}/history`);
     window.Charts.line($("#trend-" + c.component_id), hist.map((r) => ({ t: fmtDate(r.created_at), v: r.health_score, tier: r.risk_tier })), { yMin: 0, yMax: 100 });
   }
   async function ackComponent(module, cid) {

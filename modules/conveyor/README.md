@@ -15,8 +15,10 @@ zone's verdict and the module's overall status are reached**. Tunables in
 > "jam/misroute per zone". Live inspection shows it is **GTP-station pick verification**
 > (`verification_events`: `station, operation_type, type, discrepancy_type` — values like
 > `EMPTY_SUPPLY_CONTAINER_CONFIRM`/`SHORT`), 17.8k current rows keyed by **station**, not
-> zone. It is **reassigned to the GTP Station + Scanner module (Module 7)**. Grafana has no
-> discrete conveyor jam-event feed, so conveyor health uses congestion (the symptom).
+> zone. It is **reassigned to the GTP Station + Scanner module (Module 7)** — now **built
+> (Session 7)**, which owns it as its per-station primary (the `.env` key moved
+> `CONVEYOR__ → GTP_STATION__`). Grafana has no discrete conveyor jam-event feed, so conveyor
+> health uses congestion (the symptom).
 
 ---
 

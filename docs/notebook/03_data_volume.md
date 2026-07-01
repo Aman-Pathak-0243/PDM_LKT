@@ -187,4 +187,38 @@ the single fetch cannot. Across all six modules a single "Run all" writes ≈ **
 the CSV store, with archive/delete-by-range to cap footprint and the `(module, component_id,
 created_at)` index keeping trend/RUL queries fast under MySQL later.
 
+## Fetch volume — GTP STATION + SCANNER sources (sampled 2026-07-01)
+
+| Dashboard / panel | Rows fetched | Notes |
+|-------------------|-------------:|-------|
+| GTP Scanner logs `#8` (Read/NoRead) | **272** | One row per scan device; **windowed** (2.6M scans aggregated over 2d). The scanner universe. |
+| GTP Scanner logs `#4` (Scanner Hits) | ~272 | Per-scanner volume proxy (best-effort). |
+| Discrepancy Report Events `#2` | **~1,150** | verification_events over the window (~575/day); 47 of 63 stations. Windowed → scales ~linearly with the window. |
+| GTP Stations `#2` (Station Summary) | **63** | Station roster + Active/Inactive; current snapshot (not window-filtered). |
+
+A full GTP fetch pulls ≈ **1,750 rows in ~33–37 s** (four table panels; the discrepancy log is
+the largest and scales with the window). The heavy raw `scanner_events` feed (`#2`) and the
+gauge panels are **not** fetched.
+
+## Write footprint — per PdM run (GTP STATION + SCANNER)
+
+`component_health` rows/run = **272 scanners + 63 stations ≈ 334** — the **largest single-module
+writer** (more than Shuttle's 124), because it monitors two whole populations. Each row ≈
+1–1.5 KB (rca_json carries the misread/discrepancy detail + cross-links). Plus 1 `pdm_run`, 1
+`trigger_log`, ~4 `panel_catalog` upserts, ~1–2 `event_log`.
+
+| Automation interval | component_health rows/day (gtp, ~334) | growth/day | per year |
+|---------------------|-----------:|-----------:|---------:|
+| hourly | 334 × 24 ≈ 8,016 | ~10 MB | ~3.6 GB |
+| every 15 min | ~32,000 | ~40 MB | ~14 GB |
+
+GTP is the module whose **rates** most reward a wider window (misread/discrepancy are
+server-side windowed), and whose **store** most rewards accumulation (recurrence + trend on both
+scanners and stations). Across all seven modules a single "Run all" writes ≈ **16 + 124 + 6 +
+~54 + 52 + ~40 + ~334 = ~626** `component_health` rows; hourly automation ≈ 15,000 rows/day —
+still within the CSV store, with the Storage page's archive/delete-by-range to cap footprint and
+the `(module, component_id, created_at)` index keeping trend/RUL queries fast under MySQL later.
+For very frequent automation, GTP is the first module worth a tighter interval or a scanner-tier
+filter (e.g. persist only non-ok scanners) if the store grows faster than desired.
+
 *(Subsequent sessions append their module's fetch volumes + write footprint here.)*

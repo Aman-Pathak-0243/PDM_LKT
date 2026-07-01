@@ -226,4 +226,50 @@ created_time, updated_timestamp, robotType, Site_name` (6,081 rows). **Correctio
 listed as the bin secondary ("location-level error aggregation") but has **no location column** —
 keyed by `robot_id`, covered by the Shuttle + Lift modules. **Dropped as a bin source.**
 
+## Session 7 — GTP STATION + SCANNER module
+
+Resolved + sampled 2026-07-01. Data is **live/windowed** (the misread + discrepancy panels are
+time-filtered — a wider window sharpens the rates). This module scores **two component types**:
+**scanners** (272, `gtp_scanner`) and **pick stations** (63, `gtp_station`). Two mapping panels
+turned out to be pendency/inventory (dropped); the real scanner-misread panel + a `scanner_events`
+dashboard the mapping never listed were found by re-verifying.
+
+### GTP Scanner logs — `pK7-8NmVz` (folder: GTP) — **PRIMARY (scanner)**
+No template vars. MSSQL `lenskart_gtp` (`scanner_events`).
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Scanner Read /No read Data | 8 | table | `scanner, ReadCount, NoReadCount, efficiency_percentage` (windowed) | **PRIMARY signal.** Per-scanner misread = `NoRead/(Read+NoRead)`. 272 devices, 2.6M scans/2d; misread median 0.3%, p90 10%, p95 17%, max 100%. The scanner universe. |
+| Scanner Hits | 4 | table | `scanner, hits` | **Secondary (volume).** Per-scanner usage proxy (best-effort join). |
+| GTP Time wise scanner logs | 2 | table | `se.scanner, se.container, se.decision, se.create_time, se.decision_reason` | Raw event feed — **no Download-CSV** (heavy); `#8` aggregates it. Future RCA (`decision_reason`). |
+| Tote Hits / Container location / Latest Hit Inbounds | 6 / 10 / 12 | table | per-container / location / 29 inbounds | Not scanner-population signals. |
+
+Scanner ids carry the subtype: pick-station slot scanners `GS<NN>-SL<NN>` (belong to a station),
+`aisle_<NN>_inbound_scanner_<NN>`, `GTP_scanner_<N>`, `Zone…Scanner`, `Compaction_scanner_<N>`,
+`aisle_<NN>_*_diverter`, `aisle_<NN>_decant_diverter`. The worst live misreads are station slot
+scanners (`GS030-SL02`=53%, `GS015-SL02`=51%) + a dead diverter (`aisle_03_gtp_diverter`=100%).
+
+### Discrepancy Report Events — `D6sQle2Vz` (folder: GTP) — **PRIMARY (station)** — *reassigned from Conveyor (Session 3)*
+No vars. MSSQL `lenskart_gtp` (`verification_events`).
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Discrepancy Report Events | 2 | table | `SELECT * from verification_events` (`$__timeFilter` on `create_time`): `station, operation_type, user, container, type, discrepancy_type, create_time` | **PRIMARY signal.** Per-station pick-verification discrepancies. ~1,150 rows/2d across 47 of 63 stations; `type=EMPTY_SUPPLY_CONTAINER_CONFIRM`, `discrepancy_type ∈ {SHORT (1009), ALRIGHT (141)}`. Per-station median 21, p90 47, max 65 (GS037). |
+
+### GTP Stations — `GlGBwgY4z` (folder: GTP) — **PRIMARY (station roster)**
+No vars. MSSQL `lenskart_gtp` (`station`).
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Station Summary | 2 | table | `user_id, Type, id, operation_type, active_status(Active/Inactive), created_on, updated_on` | **PRIMARY roster.** The **63-station universe** (GS001..GS063) + Active/Inactive (49/14 this snapshot) + recency. Current snapshot (not window-filtered). |
+| Time Elapsed For Tote Inside Station | 6 | gauge | `SUBSTRING(location,1,5) station, DATEDIFF(MINUTE, updated_on, getdate())` | **Future true-downtime signal** — a gauge, no Download-CSV today. |
+| Marry_time | 8 | table/gauge | per-station marry latency | Gauge, no CSV. |
+
+### Dropped as GTP-health sources (verified Session 7 by live SQL/sampling)
+| Dashboard | uid | Actual content |
+|-----------|-----|----------------|
+| GTP Station Information | `j-fIgfqnk` | `#2` per-station `remaining_quantity/lines/skus/occupancy` — **PENDENCY/inventory**, not health. The mapping mislabeled it "uptime/downtime". |
+| Live GTP Summary | `j_cdWK_7z` | Station pendency / wave / outbound / current-inventory panels — **operational state**, not health. The mapping mislabeled it "real-time station throughput". |
+| GTP Throughput v2 | `ZR7Z2FR4z` | *(deferred, not dropped)* per-scanner hit-rate `#8` + per-station line-rate `#2` timeseries — a live trend source; our store already accrues per-run trend, so it is a future secondary. |
+
 *(Subsequent sessions append their module's dashboard sections here.)*

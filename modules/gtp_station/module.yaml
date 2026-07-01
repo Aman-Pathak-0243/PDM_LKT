@@ -1,0 +1,141 @@
+# =============================================================================
+# GTP STATION + SCANNER module — resolved panel mapping + thresholds.
+# Produced from live inspection + sampling on 2026-07-01 (SOP steps 2-5).
+#
+# This module scores TWO physical component types under one plugin:
+#
+#   SCANNER (component_type = gtp_scanner) — a barcode scan device in the GTP
+#     scanner_events feed. 272 devices this snapshot: pick-station slot scanners
+#     (GS<NN>-SL<NN>), inbound scanners (aisle_<NN>_inbound_scanner_<NN>), GTP/zone/
+#     compaction scanners, and diverters. SIGNAL = misread rate = NoReadCount /
+#     (ReadCount + NoReadCount) per scanner over the window. A healthy scanner reads
+#     nearly everything (fleet median misread 0.3%, p90 10%); a dirty/failing/mis-aimed
+#     scanner's no-read rate climbs (e.g. GS030-SL02 = 53%, aisle_03_gtp_diverter = 100%).
+#
+#   STATION (component_type = gtp_station) — a GTP pick station. 63 stations
+#     (GS001..GS063) from GTP Stations #2 (roster + Active/Inactive). SIGNAL = per-station
+#     pick-verification discrepancy rate (verification_events: EMPTY_SUPPLY_CONTAINER_CONFIRM
+#     / SHORT keyed by station) + peer deviation + cross-run recurrence/trend. active_status
+#     is CONTEXT (14 of 63 stations are legitimately Inactive), plus a low-weight
+#     offline-persistence signal from the store (a station dark run-after-run).
+#
+# WHY BOTH: the module is "GTP Station + Scanner" and the mapped signal is "scanner
+# misread-rate trend + station downtime pattern -> scanner/station hardware failure".
+# The pick-station scanner IS the GS<NN>-SL<NN> device, so a station's discrepancy climb
+# and its slot-scanner's misread climb corroborate each other (RCA cross-links them).
+#
+# WINDOW MATTERS (unlike Gate/Bin current-state): GTP Scanner logs #8 and Discrepancy
+# Report Events #2 are time-FILTERED (create_time BETWEEN $__timeFrom .. $__timeTo), so a
+# wider window sharpens the misread/discrepancy rates. GTP Stations #2 is a current
+# roster snapshot (63 rows regardless of window).
+#
+# DROPPED as GTP-health sources (verified by live SQL/sampling, Session 7):
+#   GTP Station Information (j-fIgfqnk) #2 = per-station remaining_quantity/lines/skus/occupancy
+#     -> PENDENCY / inventory, not equipment health. The mapping mislabeled it "uptime/downtime".
+#   Live GTP Summary (j_cdWK_7z) = station pendency / wave / outbound / current-inventory panels
+#     -> operational state, not health. The mapping mislabeled it "real-time station throughput".
+# Documented FUTURE secondary (not fetched in the core run): GTP Throughput v2 (ZR7Z2FR4z)
+#   #8 per-scanner hit-rate timeseries, #2 per-station line rate — a live trend source; our store
+#   already accrues per-run trend, so it is deferred to keep the fetch light.
+# =============================================================================
+module: gtp_station
+title: GTP Station + Scanner PdM
+component_type: station/scanner
+description: >-
+  Predictive maintenance for GTP pick stations and barcode scanners. Scanner health is
+  inferred from per-scanner misread rate (NoRead/(Read+NoRead)); station health from the
+  per-station pick-verification discrepancy rate, peer deviation, and cross-run
+  recurrence/trend, with active/inactive status as context. No maintenance logbook.
+
+default_window: now-2d           # scanner #8 + discrepancy #2 are time-filtered; a wider window sharpens rates
+anchor_to_data_asof: false       # windowed rates (not a frozen log); the fetch window IS the observation window
+
+# ---- Data sources (resolved by live inspection) -----------------------------
+dashboards:
+  gtp_scanner_logs:               # PRIMARY (scanner): misread rate + volume
+    uid: pK7-8NmVz
+    env_key: GTP_STATION__GTP_SCANNER_LOGS
+    role: primary
+    db: lenskart_gtp (MSSQL)
+    misread_panel: 8              # "Scanner Read /No read Data" — scanner, ReadCount, NoReadCount, efficiency_percentage
+    hits_panel: 4                 # "Scanner Hits" — scanner, hits (usage/volume proxy)
+    # #8 is windowed (create_time between $__timeFrom..$__timeTo). Component universe (scanners)
+    # is derived from it. #2 "GTP Time wise scanner logs" (raw se.scanner/decision/decision_reason)
+    # did not expose Download CSV (heavy) -> documented, not fetched; #8 already aggregates it.
+    ignore_panels: [2, 6, 10, 12] # #2 raw events (no CSV), #6 Tote Hits (per-container), #10 container-location, #12 latest-hit (29 inbounds only)
+    notes: >-
+      misread_rate = NoReadCount / (ReadCount + NoReadCount) per scanner. Volume-gated: a
+      scanner with few scans in the window gets a scaled penalty + lower confidence. #4 hits
+      joined by scanner as an independent volume/recency proxy (best-effort).
+
+  discrepancy_report_events:      # PRIMARY (station): pick-verification discrepancies
+    uid: D6sQle2Vz
+    env_key: GTP_STATION__DISCREPANCY_REPORT_EVENTS
+    role: primary
+    db: lenskart_gtp (MSSQL)
+    signal_panel: 2               # "Discrepancy Report Events" — SELECT * from verification_events (time-filtered)
+    # #2 columns: station, operation_type, user, container, type, discrepancy_type, create_time.
+    #   ~1,150 rows / 2 days across 47 of 63 stations; type=EMPTY_SUPPLY_CONTAINER_CONFIRM,
+    #   discrepancy_type in {SHORT, ALRIGHT}. Reassigned here from Conveyor in Session 3.
+    notes: >-
+      Per-station discrepancy count over the window -> discrepancies/day; peer-z vs sibling
+      stations is the dominant station penalty (absolute rate is partly inventory-driven, so
+      peer deviation + recurrence isolate the station-specific degradation). SHORT is the real
+      short-pick outcome; ALRIGHT = verified-clean (tracked in the type mix for RCA).
+
+  gtp_stations:                   # PRIMARY (station roster + status)
+    uid: GlGBwgY4z
+    env_key: GTP_STATION__GTP_STATIONS
+    role: primary
+    db: lenskart_gtp (MSSQL)
+    signal_panel: 2               # "Station Summary" — user_id, Type, id, operation_type, active_status, created_on, updated_on
+    # 63 stations (GS001..GS063). active_status Active/Inactive (49/14 this snapshot). Current roster
+    # snapshot (not window-filtered). Defines the STATION component universe = fixed 63-station roster.
+    ignore_panels: [6, 8]         # #6 gauge tote-elapsed-minutes (no CSV; FUTURE true-downtime signal), #8 marry_time (gauge, no CSV)
+    notes: >-
+      Station universe + Active/Inactive status + updated_on recency. active_status is context
+      (many stations legitimately Inactive); the store adds an offline-persistence signal across runs.
+
+cross_module_notes:
+  - Discrepancy Report Events (D6sQle2Vz) was CONVEYOR's mapped "jam/misroute per zone" until Session 3 proved
+    it is verification_events keyed by STATION -> reassigned here; the .env key moved CONVEYOR__ -> GTP_STATION__.
+  - decant_* / Compaction_* scanners appear in the GTP scanner_events feed but belong to the Decanting Station
+    (Module 8) / compaction line -> scored here (they are GTP-feed scan points) and tagged by subtype; RCA notes
+    the overlap so Module 8 can reconcile decant scanners when it is built.
+  - A GS<NN>-SL<NN> scanner with a high misread rate is the pick-station scanner for station GS<NN>; RCA links a
+    flagged station to its slot scanner (and vice-versa) as a same-cause corroboration.
+  - GTP Throughput v2 (ZR7Z2FR4z) per-scanner/station hit-rate timeseries is a future secondary (trend already
+    accrues in our store); GTP HOLD/TRANSIT (C8jMvAcIk) is the Conveyor module's flow-stress secondary.
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5   # >= this many prior snapshots -> 'trend' regime
+  # NOTE: peer-z is a WITHIN-snapshot measurement (this run's misread/discrepancy vs peers), so it
+  # applies immediately. recurrence/offline-persistence are cross-run counts that are 0 at cold start
+  # by construction, so no separate gate is needed (honest cold-start falls out of the store being empty).
+  tiers: {ok: 85, watch: 65, warn: 40}
+  ttm_bands_hours: {critical: 48, warn: 240, watch: 720}
+  confidence:
+    scanner_coldstart_base: 0.40
+    station_coldstart_base: 0.40
+    trend_base: 0.72
+
+  scanner:
+    min_volume_full: 200          # scans in the window needed for full misread-penalty weight + full confidence
+    min_volume_peer: 200          # min scans for the peer_z penalty to apply (and to be in the peer baseline) — drops noisy low-volume scanners
+    peer_z_min_misread_pct: 1.0   # peer_z penalty also requires misread% >= this, so a trivially-above-a-tiny-median scanner is not flagged
+    recur_min_misread_pct: 2.0    # recurrence counts prior runs whose MISREAD% >= this (misread-specific, so peer_z/volume artifacts don't self-reinforce)
+    penalties:                    # weight · cap (points off 100)
+      misread:    {weight: 3.0, cap: 75}   # per 1% misread (NoRead/(Read+NoRead)); scaled by volume_factor
+      peer_z:     {weight: 4.0, cap: 16}   # robust z of misread% vs peers (gated by min_volume_peer + peer_z_min_misread_pct)
+      recurrence: {weight: 6.0, cap: 30}   # per prior run this scanner's MISREAD% was >= recur_min_misread_pct
+
+  station:
+    discrepancy_abs_floor_per_day: 20   # per-day discrepancies at/below this add no absolute penalty (plant-normal band)
+    recur_peer_z: 2.0                   # recurrence counts a prior run whose discrepancy_peer_z >= this ...
+    recur_min_per_day: 20               # ... OR whose discrepancies/day > this. DISCREPANCY-specific, so offline-only runs do NOT count (a legitimately-Inactive station never escalates past WATCH)
+    penalties:                          # weight · cap (points off 100)
+      discrepancy_peer_z: {weight: 6.0, cap: 40}   # robust z of discrepancies/day vs peer stations — the dominant station penalty
+      discrepancy_abs:    {weight: 1.5, cap: 20}   # per per-day discrepancy above the floor (very-high absolute rate)
+      recurrence:         {weight: 6.0, cap: 30}   # per prior run this station's DISCREPANCIES were elevated (see recur_peer_z / recur_min_per_day)
+      offline_persistence: {weight: 4.0, cap: 20}  # per consecutive prior run Inactive beyond 1 (context downtime; capped so sustained-offline reaches WATCH, never warn/critical — it may be intentional)
