@@ -1,0 +1,97 @@
+# =============================================================================
+# BIN / TOTE-MECHANICAL module — resolved panel mapping + thresholds.
+# Produced from live inspection + sampling on 2026-07-01 (SOP steps 3-5).
+#
+# COMPONENT = each physical bin LOCATION (slot address NNN-NN-N-NNN-N-NN =
+# Aisle-Level-?-Location-?-Deep, e.g. 001-14-1-119-1-02). The unit that physically
+# degrades is the slot/rail: a healthy slot blocks a tote rarely and briefly; a
+# degrading one blocks totes repeatedly (the tote tilts / won't seat), keeps a block
+# unresolved for long, and recurs at the SAME location.
+#
+# UNIVERSE = the CURRENTLY-blocked locations (live bin_blocked table, status=0) — the
+# actionable anomaly set (~37 this snapshot, each blocked once; no within-snapshot
+# clustering). Only currently-blocked slots are scored (standard anomaly semantics).
+#
+# The "recurring blocks at the same slot" signal comes from THREE places:
+#   (a) block-age      — how long a bin has stayed blocked/unresolved (stuck), from blockedTime;
+#   (b) HISTORICAL freq — how many times this slot blocked in the frozen Bin Block History log;
+#   (c) cross-run recurrence — how many prior PdM runs flagged this slot (our accumulating store).
+#
+# Bin blocked/tote-tilted #2 is CURRENT-STATE (reads bin_blocked status=0; all current blocks
+# are recent). Its partition LEFT JOIN inflates rows (one per material partition), so rows are
+# deduped to blocked-tote events before grouping by location. Bin Block History #2 is FROZEN
+# (2022-12 .. 2024-09; shuttle_command status=10 with source/destination bin locations) — 26k
+# rows, max 263 blocks at one slot; used ONLY as a per-location chronic-slot frequency (best-effort).
+#
+# Aggregate Error Report (DaVyCb9Hz) was the mapping's claimed secondary — live SQL shows it is
+# shuttle_error UNION lift_error keyed by robot_id with NO location column (6,081 rows) -> dropped.
+# Bin Blocked Statistics (wNp3FGZNk11) reads the SAME live bin_blocked table (server-side #14
+# "Repeated Location" / #6 total / #8 aisle-wise) — equivalent to tilted #2, so not separately fetched.
+# =============================================================================
+module: bin_mech
+title: Bin / Tote-Mechanical PdM
+component_type: bin_location
+description: >-
+  Predictive maintenance for ASRS storage bin slots / rails. Health is inferred from
+  bin-block (tote-tilt) events at each grid slot — how long a block stays unresolved
+  (block-age), how many totes are blocked at the slot now, the slot's historical block
+  frequency, and cross-run recurrence/persistence accrued in our store. No maintenance logbook.
+
+default_window: now-2d           # tilted #2 is current-state; window is nominal for that panel
+anchor_to_data_asof: true        # block-age anchors to max(blockedTime) in the current set (tz-robust)
+
+# ---- Data sources (resolved by live inspection) -----------------------------
+dashboards:
+  bin_blocked_tilted:             # PRIMARY (current blocked set + component universe)
+    uid: GOqISik4k
+    env_key: BIN_MECH__BIN_BLOCKED_TILTED
+    role: primary
+    db: lenskart_quadron (MSSQL)
+    signal_panel: 2               # "Bin Blocked report" — current blocked bins per location
+    # #2 columns: tracker, aisle, zone, level, location, container, quantity, blockedTime
+    #   (bin_blocked status=0 join location_tracker/container_tracker/zone; entity type 8).
+    #   Partition LEFT JOIN inflates rows -> dedup (location,tracker,blockedTime) before grouping.
+    action_panels: [4]            # #4 "update_bin_block" = UPDATE statement (write panel) -> NON-signal, skip
+    ignore_panels: [5]            # #5 "Bid Unacknowledged report" = bids, not bin-block -> skip
+    notes: >-
+      Current-state (reads the live bin_blocked table). Component universe = currently-blocked
+      locations. Group by location -> current cluster size, block-age (from blockedTime),
+      distinct containers/trackers, aisle/level.
+
+  bin_block_history:              # SECONDARY (per-location historical block frequency; frozen)
+    uid: hIVZMtGVz
+    env_key: BIN_MECH__BIN_BLOCK_HISTORY
+    role: secondary
+    db: lenskart_quadron (MSSQL)
+    signal_panel: 2               # "Bin block Block History" — shuttle_command status=10, source/destination bins
+    # #2 columns: shuttle_id, tracker, source, destination, bay, zone, TIMING.
+    #   Count per-location SOURCE frequency (bin-format NNN-NN-N-NNN-N-NN) = chronic-slot signal.
+    template_vars: [startTime, endTime]   # own vars (not Grafana from/to); returns its default (frozen) range
+    frozen: true                  # data spans 2022-12 .. 2024-09; used as a static chronic-slot enrichment only
+    notes: >-
+      Best-effort (~26k rows). If the fetch fails/times out the run continues on current + store
+      recurrence. Historical freq barely overlaps current blocks (chronic slots are mostly not
+      blocked right now), so it enriches RCA and cold-start rather than dominating.
+
+cross_module_notes:
+  - Aggregate Error Report (DaVyCb9Hz #2) is shuttle_error UNION lift_error keyed by robot_id (NO location) -> dropped; covered by Shuttle + Lift.
+  - Bin Blocked Statistics (wNp3FGZNk11) reads the same live bin_blocked table (server-side aggregates) — equivalent to tilted #2; documented, not separately fetched.
+  - Many current blocks concentrated on ONE aisle is a cross-feature to the Shuttle module (that aisle's shuttle may be mis-seating totes) and to Tracker (mislocation) — surfaced in RCA.
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5   # >= this many prior snapshots -> 'trend' regime
+  tiers: {ok: 85, watch: 65, warn: 40}
+  block_age_grace_hours: 2        # a block younger than this is treated as being actively resolved (no age penalty)
+  status_blocked: 0               # bin_blocked.status = 0 means currently blocked
+  penalties:                      # weight · cap (points off 100)
+    blocked_base: {weight: 10.0, cap: 10}   # flat: this slot has a tote blocked right now
+    block_age:    {weight: 2.0,  cap: 35}   # per hour the block has stayed unresolved beyond grace (stuck)
+    cluster:      {weight: 12.0, cap: 24}   # per additional tote blocked at the same slot now
+    historical:   {weight: 0.4,  cap: 24}   # per historical block at this slot (frozen Bin Block History)
+    recurrence:   {weight: 8.0,  cap: 40}   # per prior PdM run this slot appeared blocked (our store)
+    peer_z:       {weight: 4.0,  cap: 14}   # robust z of block-age vs peer blocked slots
+  confidence:
+    coldstart_base: 0.42
+    trend_base: 0.72
+  ttm_bands_hours: {critical: 48, warn: 240, watch: 720}

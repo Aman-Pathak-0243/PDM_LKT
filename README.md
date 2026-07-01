@@ -9,10 +9,11 @@ dashboard with terminal-resident automation.
 Built **one module per session**. **Module 1: Lift**, **Module 2: Shuttle**
 (cycles-based RUL), **Module 3: Conveyor** (per-zone congestion, live data),
 **Module 4: Tracker / Position-Sensor** (per-location bad-tracker cluster + cross-run
-recurrence), and **Module 5: Gate / Door-Actuator** (per-gate open/close state + response
-latency + cross-run stuck persistence, live data) are complete. See
-[`pdm_notebook.md`](pdm_notebook.md) for the full book and [`CLAUDE.md`](CLAUDE.md) for
-durable conventions.
+recurrence), **Module 5: Gate / Door-Actuator** (per-gate open/close state + response
+latency + cross-run stuck persistence, live data), and **Module 6: Bin / Tote-Mechanical**
+(per-slot bin-block/tilt: block-age + historical + cross-run recurrence, live data) are
+complete. See [`pdm_notebook.md`](pdm_notebook.md) for the full book and
+[`CLAUDE.md`](CLAUDE.md) for durable conventions.
 
 ---
 
@@ -38,7 +39,7 @@ process. Open `http://<host-ip>:8800`.
 
 - **Overview** — one tile per module (worst-component status, last run). Pick a
   **window** (top-right) and **Run PdM (all)**, or run a single module from its tile.
-- **Per-module page** (`/module/lift`, `/module/shuttle`, `/module/conveyor`, `/module/tracker`, `/module/gate`) —
+- **Per-module page** (`/module/lift`, `/module/shuttle`, `/module/conveyor`, `/module/tracker`, `/module/gate`, `/module/bin_mech`) —
   per-component health, risk tier, predicted time-to-maintenance, confidence, regime; click
   a row for RCA + health trend; optional "Mark maintenance done". Each page has an in-page
   **Methodology** section explaining how a component's verdict and the module's overall
@@ -77,7 +78,7 @@ application-logic changes.
 core/      config, structured logging, Grafana auth/fetch/inspect, storage
            abstraction (CSV active / MySQL dormant), module registry, runner,
            scheduler, audit.
-modules/   one self-registering plugin per equipment type (lift, shuttle, conveyor, tracker, gate).
+modules/   one self-registering plugin per equipment type (lift, shuttle, conveyor, tracker, gate, bin_mech).
 webapp/    FastAPI app, JSON API, services, exporting, templates, static.
 db/        MySQL schema (designed).
 docs/      the PdM book (notebook chapters + mapping).

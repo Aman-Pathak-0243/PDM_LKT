@@ -99,17 +99,26 @@ pre-failure (mislocated totes). Implemented in `modules/tracker/`.
 
 ---
 
-## 5. Bin / Tote Mechanical PdM
-**Sub-component:** Storage bin slots / rails
+## 5. Bin / Tote Mechanical PdM  ✅ BUILT (Session 6) — RESOLVED BY LIVE INSPECTION
+**Sub-component:** Storage bin slots / rails. Component = the grid bin **LOCATION**
+(slot `NNN-NN-N-NNN-N-NN` = Aisle-Level-Rack-Location-Deep). Universe = the currently-blocked
+slots (dynamic anomaly set, ~40 this snapshot).
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | Bin Block History | Maintenance | Block events per bin location |
-| Primary | Bin blocked (i.e. tote tilted) | Maintenance | Tilt/block faults |
-| Secondary | Aggregate Error Report | Maintenance | Location-level error aggregation |
+| Role | Dashboard | Folder | What it provides | Verified |
+|------|-----------|--------|------------------|----------|
+| Primary | Bin blocked (i.e. tote tilted) (`GOqISik4k`) | Maintenance | `#2` current blocked bins per location: `tracker, aisle, zone, level, location, container, blockedTime` (bin_blocked status=0). Current-state; partition-inflated → dedup to blocked-tote events. | ✅ ~40 locations |
+| Secondary (historical) | Bin Block History (`hIVZMtGVz`) | Maintenance | `#2` per-location historical block frequency (`shuttle_command status=10`, source/dest bins). **Frozen** 2022-24; 26,638 rows, max 263 blocks at one slot → chronic-slot enrichment. | ✅ 26,638 rows |
 
-**Signal type:** Recurring blocks/tilts at the **same** location → slot/rail degradation (not random).
-**Build priority:** 6.
+**Signal type:** bin-block (tote-tilt) events at a slot — **block-age** (how long unresolved) +
+current cluster + **historical block frequency** (chronic slot) + **cross-run recurrence** (from
+our store) + peer deviation → slot/rail degradation (not random). Implemented in `modules/bin_mech/`.
+
+> **CORRECTION (Session 6):** the mapping listed **Aggregate Error Report** (`DaVyCb9Hz`) as the
+> bin secondary ("location-level error aggregation"). Live SQL shows it is `shuttle_error UNION
+> lift_error` keyed by `robot_id` with **no location column** (6,081 rows) — covered by the
+> Shuttle + Lift modules. **Dropped as a bin source.** Also noted: **Bin Blocked Statistics**
+> (`wNp3FGZNk11`, incl. `#14 "Repeated Location"`) reads the *same* live `bin_blocked` table as
+> the primary (server-side aggregates) — documented as equivalent, not separately fetched.
 
 ---
 

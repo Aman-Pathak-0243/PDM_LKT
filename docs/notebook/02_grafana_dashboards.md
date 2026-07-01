@@ -192,4 +192,38 @@ shuttle_error …` (94 rows). **Correction to the mapping:** the mapping listed 
 secondary ("Gate-related error codes"). Live SQL shows it has **no gate/id column** — it is
 `shuttle_error` and is the **Shuttle module's primary**. **Dropped as a gate source.**
 
+## Session 6 — BIN / TOTE-MECHANICAL module
+
+Resolved + sampled 2026-07-01. **Anomaly/recurrence** module — the component is the grid bin
+**LOCATION** (slot `NNN-NN-N-NNN-N-NN`), universe = currently-blocked slots. One correction to
+the mapping (below).
+
+### Bin blocked (i.e. tote tilted) — `GOqISik4k` (folder: Maintenance) — **PRIMARY**
+Template vars: `aisle`, `level`. MSSQL `lenskart_quadron.bin_blocked` (status=0).
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Bin Blocked report | 2 | table | `tracker, aisle, zone, level, location, container, quantity, blockedTime` (bin_blocked status=0 join location_tracker/container_tracker/zone; entity type 8) | **PRIMARY signal.** Current set of blocked bins per **location** = component universe. **Current-state** (live table; all blocks recent). 224 rows this snapshot → **40 distinct locations** after partition dedup. |
+| update_bin_block | 4 | table | `UPDATE bin_blocked set status=1 …` | **ACTION (write) panel — non-signal, skipped.** |
+| Bid Unacknowledged report | 5 | table | `select * from bid where status=0` | Unacknowledged bids — not a bin-block signal, skipped. |
+
+### Bin Block History — `hIVZMtGVz` (folder: Maintenance) — **SECONDARY (historical recurrence)**
+Template vars: `startTime`, `endTime` (own vars, not Grafana from/to → returns its default range).
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Bin block Block History | 2 | table | `shuttle_id, tracker, source, destination, bay, zone, TIMING` (`shuttle_command status=10` join `bin`/`entity`) | **SECONDARY.** Per-location **SOURCE** frequency = chronic-slot fingerprint. **Frozen** 2022-12 → 2024-09; **26,638 rows**, 2,628 distinct source slots, **max 263** blocks at one slot (348 slots >20×). Barely overlaps current blocks (chronic slots mostly not blocked now) → enriches cold-start / RCA, fetched best-effort. |
+
+### Bin Blocked Statistics — `wNp3FGZNk11` (folder: Lenskart Client Requirement) — **EQUIVALENT (not separately fetched)**
+No vars; `$__timeFrom/$__timeTo`. Reads the **same live `bin_blocked` table** as tilted #2:
+`#2` "Bin Blocked Data" (event rows incl. `Shuttle`), `#6` "Total Bin Blocked", `#8` "Aisle wise
+bin Blocked", **`#14` "Repeated Location for Bin Block"** (`location → COUNT`, all 1 currently —
+no within-snapshot recurrence). Server-side view of our primary; documented, not fetched.
+
+### Aggregate Error Report — `DaVyCb9Hz` (folder: Maintenance) — **DROPPED (NOT a bin source)**
+Panel #2 = `shuttle_error UNION lift_error` → `error_code, error_desc, error_type, robot_id,
+created_time, updated_timestamp, robotType, Site_name` (6,081 rows). **Correction to the mapping:**
+listed as the bin secondary ("location-level error aggregation") but has **no location column** —
+keyed by `robot_id`, covered by the Shuttle + Lift modules. **Dropped as a bin source.**
+
 *(Subsequent sessions append their module's dashboard sections here.)*

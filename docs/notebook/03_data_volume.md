@@ -158,4 +158,33 @@ hourly automation ≈ 6,000 rows/day — still comfortably within the CSV store,
 archive/delete-by-range to cap footprint and the `(module, component_id, created_at)` index
 keeping trend/RUL queries fast under MySQL later.
 
+## Fetch volume — BIN / TOTE-MECHANICAL sources (sampled 2026-07-01)
+
+| Dashboard / panel | Rows fetched | Notes |
+|-------------------|-------------:|-------|
+| Bin blocked / tote-tilted `#2` | ~220 | Current blocked bins (live `bin_blocked`); partition-inflated → **~40 distinct locations** after dedup. |
+| Bin Block History `#2` | **~26,600** | Frozen block log (2022-12 → 2024-09); per-location historical block frequency. The heavy fetch. |
+
+A full bin fetch pulls ≈ **27k rows** in ~5–8 s (dominated by the historical log). The history is
+frozen and re-fetched each run (best-effort) — a future optimisation is to cache it, since it does
+not change; correctness (self-contained runs) is preferred for now.
+
+## Write footprint — per PdM run (BIN / TOTE-MECHANICAL)
+
+`component_health` rows/run = **the number of currently-blocked slots** (≈ 40 this snapshot), not
+a fixed roster — it shrinks/grows with the block anomaly set. Each row ≈ 1–1.5 KB. Plus 1
+`pdm_run`, 1 `trigger_log`, ~3 `panel_catalog` upserts, ~1–2 `event_log`.
+
+| Automation interval | component_health rows/day (bin, ~40) | growth/day | per year |
+|---------------------|-----------:|-----------:|---------:|
+| hourly | 40 × 24 ≈ 960 | ~1.3 MB | ~0.5 GB |
+| every 15 min | ~3,840 | ~5 MB | ~1.8 GB |
+
+Like Tracker, this module's store **most** rewards accumulation: cross-run recurrence (a slot
+blocked run after run) is its strongest signal, so its longitudinal history does predictive work
+the single fetch cannot. Across all six modules a single "Run all" writes ≈ **16 + 124 + 6 + ~54 +
+52 + ~40 = ~292** `component_health` rows; hourly automation ≈ 7,000 rows/day — comfortably within
+the CSV store, with archive/delete-by-range to cap footprint and the `(module, component_id,
+created_at)` index keeping trend/RUL queries fast under MySQL later.
+
 *(Subsequent sessions append their module's fetch volumes + write footprint here.)*
