@@ -38,4 +38,14 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 **Module set COMPLETE — 11/11 built.** The Word notebook compiles: Chapter 1, Chapter 2, one chapter per module (Lift → Meta), then the data-volume chapter (Chapter 3).
 
 ## Operating the system
-- [README.md](README.md) — operator + developer guide (install, run, LAN access, dashboards).
+- [README.md](README.md) — quick-start (install, run, LAN access, dashboards).
+
+## Guides (Session 13 documentation suite)
+- [System Overview](docs/SYSTEM_OVERVIEW.md) — what it is, how it's built, what it tracks, the value it adds.
+- [Operator SOP](docs/OPERATOR_SOP.md) — how to run + monitor it (regular vs interval tasks, navigation).
+- [Hosting Resources](docs/HOSTING_RESOURCES.md) — machine spec, DB-size projection, LAN/firewall, backup.
+- [Developer Guide](docs/DEVELOPER_GUIDE.md) — architecture, adding a module, and the DB backup/export/migration workflow.
+- [URL / Route Map](docs/URL_MAP.md) — every dashboard page + JSON endpoint.
+- [Per-Module Health Methodology](docs/MODULE_METHODOLOGY.md) — panels → fields → algorithm, per module.
+- [Migration/export script](scripts/db_migrate_export.py) — backup / copy / load / verify the store (CSV↔MySQL).
+- **[ASRS_PdM_Notebook.docx](docs/ASRS_PdM_Notebook.docx)** — the compiled Word notebook (all of the above + module chapters), rebuilt via [`scripts/build_notebook.py`](scripts/build_notebook.py).

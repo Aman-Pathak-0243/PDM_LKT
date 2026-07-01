@@ -30,6 +30,24 @@ now COMPLETE (11/11)**. See [`pdm_notebook.md`](pdm_notebook.md) for the full bo
 
 ---
 
+## Documentation
+
+Full guides live under [`docs/`](docs/) (and are compiled into a single Word notebook):
+
+| Doc | For |
+|-----|-----|
+| [System Overview](docs/SYSTEM_OVERVIEW.md) | What it is, how it's built, what it tracks, the value it adds |
+| [Operator SOP](docs/OPERATOR_SOP.md) | Running + monitoring day to day (regular/interval tasks, navigation) |
+| [Hosting Resources](docs/HOSTING_RESOURCES.md) | Machine spec, DB-size projection, LAN/firewall, backup |
+| [Developer Guide](docs/DEVELOPER_GUIDE.md) | Architecture, adding a module, DB backup/export/migration workflow |
+| [URL / Route Map](docs/URL_MAP.md) | Every dashboard page + JSON endpoint |
+| [Per-Module Health Methodology](docs/MODULE_METHODOLOGY.md) | Panels → fields → algorithm, per module |
+| [PdM Methodology](docs/notebook/methodology.md) | The shared scoring philosophy (+ §12 audit invariants) |
+| [Audit & Hardening Report](docs/AUDIT_REPORT.md) | The Session-12 correctness/methodology/RCA audit + fixes |
+| **[ASRS_PdM_Notebook.docx](docs/ASRS_PdM_Notebook.docx)** | The compiled Word notebook (rebuild: `python scripts/build_notebook.py`) |
+
+---
+
 ## Operator guide
 
 ### Prerequisites

@@ -31,3 +31,8 @@ openpyxl>=3.1.2            # Excel export for the Storage Management module
 
 # --- Models / validation ---
 pydantic>=2.6.0
+
+# --- Documentation build (optional; only for scripts/build_notebook.py) ---
+# Not required to run the PdM system — needed only to (re)build the Word notebook.
+python-docx>=1.1.0
+
