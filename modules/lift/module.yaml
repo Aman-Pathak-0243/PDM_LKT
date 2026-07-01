@@ -102,7 +102,7 @@ thresholds:
 
 # ---- Error code catalog (code -> category + severity 0..1) -------------------
 # Severity drives the penalty + RCA. Mechanical-wear categories are the strongest
-# maintenance predictors; communication codes also feed the future Network module.
+# maintenance predictors; communication codes also feed the Network module (Module 9, built Session 9).
 mechanical_categories: [mechanical_wear, drive_motor, mechanical, safety_limit]
 error_catalog:
   1:  {desc: "Lift axis error", category: mechanical, severity: 0.85}

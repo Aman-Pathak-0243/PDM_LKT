@@ -212,15 +212,32 @@ diverters vs operator stations), so only line-level corroboration. Implemented i
 
 ---
 
-## 9. Network / Comms PdM
-**Sub-component:** Controller communication layer
+## 9. Network / Comms PdM  ✅ BUILT (Session 9) — RESOLVED BY LIVE INSPECTION
+**Sub-component:** the controller communication layer, observed **per shuttle**. Component =
+the per-shuttle **comms link** (`network_link`, keyed by `shuttle_id`); roster = **124 links**
+(`QD_Shuttle_<aisle>_<unit>`).
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | Quadron Network status | Maintenance | Latency, packet loss, link state |
+| Role | Dashboard | Folder | What it provides | Verified |
+|------|-----------|--------|------------------|----------|
+| Primary (windowed) | Quadron Network status (`gL0OBnq7z`) | Maintenance | `#4` per-shuttle network **uptime%** since `${Date}` (we set `${Date}`=window start → windowed **downtime%** = 100−uptime), from `shuttle_error` where `error_type='SHUTTLE_NETWORK_STATUS'`. The 124-shuttle roster. | ✅ 124 links, live |
+| Secondary (recency) | Quadron Network status | Maintenance | `#2` per-shuttle uptime% **today** (since midnight) → flags links worse now than their window average | ✅ ~100 links |
 
-**Signal type:** Latency creep / packet-loss trend → comms failure precursor (often precedes shuttle/lift errors — strong cross-feature).
-**Build priority:** 9 — also feed as input to Modules 1, 2.
+**Signal type:** per-shuttle network **downtime%** (peer deviation + absolute rate + a today-vs-window
+recency spike + cross-run recurrence/trend) → comms-link degradation. A **cross-feature**: comms drops
+precede/cause shuttle pick errors, so a flagged link cross-links to the Shuttle module, and downtime
+clustering on an aisle raises an aisle AP/controller flag (→ the meta-module). Implemented in
+`modules/network/`.
+
+> **CORRECTION (Session 9):** the mapping called this "latency, packet loss, link state". Live SQL shows
+> it is per-shuttle **uptime% / disconnect-duration** derived from `shuttle_error`
+> (`error_type='SHUTTLE_NETWORK_STATUS'`) — there is **no latency-ms or packet-loss-% metric**, and the
+> component key is the **shuttle** (its comms link), not a per-controller/per-link device. It is a
+> **different error subset** than the Shuttle module's mechanical FORK/TELESCOPIC errors (frozen 2023,
+> which exclude network status) → scoring comms here does **not** double-count Shuttle. Live median
+> downtime 3.25%, worst `QD_Shuttle_01_19` 29.7% (aisle_01 the worst aisle). The OPC dataloggers
+> (`3HJAGPbVk`, `SBaBnPb4z`) are candidate future latency/packet sources (raw telemetry, no CSV today).
+
+**Build priority:** 9 — infra cross-feature (also feeds Modules 1, 2 + the meta layer). **Built.**
 
 ---
 

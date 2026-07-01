@@ -1,0 +1,91 @@
+# =============================================================================
+# NETWORK / COMMS module — resolved panel mapping + thresholds.
+# Produced from live inspection + sampling on 2026-07-01 (SOP steps 2-5).
+#
+# COMPONENT (component_type = network_link) — the per-SHUTTLE comms link. Universe = the 124-shuttle
+#   roster (QD_Shuttle_<aisle>_<unit>), keyed by shuttle_id. This is the wireless comms channel between
+#   the WES/controller and each shuttle; its health is the "controller communication layer" the mapping
+#   (§9) names, observed per shuttle (the only granularity the data provides).
+#
+# SIGNAL = network downtime% = 100 - uptime%, where uptime% comes from Quadron Network status:
+#   uptime% = (1 - SUM(disconnect_seconds) / elapsed_seconds) * 100 over shuttle_error rows with
+#   error_type = 'SHUTTLE_NETWORK_STATUS' (status=1). A healthy link is disconnected ~0-3% of the time;
+#   a flaky/degrading link's downtime% climbs (fleet median 3.25%, p90 6.5%, worst 29.7% this snapshot).
+#
+# WHY NOT the Shuttle module: the Shuttle module scores MECHANICAL wear from a DIFFERENT error subset
+#   (FORK/TELESCOPIC, frozen 2023) and does not consume SHUTTLE_NETWORK_STATUS -> no double-count. This
+#   module scores the COMMS facet of the same physical shuttle. It is a CROSS-FEATURE: comms drops often
+#   precede/cause pick/handling errors, so a flagged link cross-links to the Shuttle module + (via aisle
+#   clustering) to a possible aisle AP/controller common cause -> the future meta-module. Lift (codes 3/4)
+#   and Shuttle (servo-drive) already emit "-> network" flags; this module is their upstream counterpart.
+#
+# WINDOW MATTERS: panel #4 is parameterised by a ${Date} template var, so we set ${Date} = the window
+#   START (now - N) -> a WINDOWED downtime% (a wider window smooths the average). Panel #2 is scoped to
+#   since-midnight TODAY -> a recency signal (accelerating degradation: e.g. QD_Shuttle_01_19 was 29.7%
+#   over the window but 68.2% today). Nothing hard-codes 2 days.
+#
+# NOTE (mapping was partly wrong, per every prior session): the mapping called this "latency, packet
+#   loss, link state". Live SQL shows it is per-shuttle UPTIME% / disconnect-duration (link state over
+#   time) — there is NO latency-ms or packet-loss-% metric. Scoped honestly to downtime%.
+# =============================================================================
+module: network
+title: Network / Comms PdM
+component_type: network_link
+description: >-
+  Predictive maintenance for the controller communication layer, observed per shuttle. Each shuttle's
+  wireless comms link is scored from its network downtime% (100 - uptime%, from Quadron Network status /
+  SHUTTLE_NETWORK_STATUS): peer deviation, absolute rate, a today-vs-window recency spike, and cross-run
+  recurrence/trend. A cross-feature that precedes shuttle/lift operational errors. No maintenance logbook.
+
+default_window: now-2d           # #4 is windowed via ${Date}=window start; a wider window smooths the rate
+anchor_to_data_asof: false       # windowed rate (live), not a frozen log; the fetch window IS the observation window
+
+# ---- Data sources (resolved by live inspection) -----------------------------
+dashboards:
+  quadron_network_status:
+    uid: gL0OBnq7z
+    env_key: NETWORK__QUADRON_NETWORK_STATUS
+    role: primary
+    db: lenskart_quadron (MSSQL)
+    windowed_panel: 4             # "Shuttle network status specific date" — shuttle_id, Value(uptime%); WHERE created_time > ${Date}
+    today_panel: 2                # "shuttle/day %uptime" — shuttle_id, Value(uptime%); WHERE created_time > midnight today (recency)
+    date_var: Date                # #4 template var; set to the window start (now - N) at fetch time
+    # #4 returns the full 124-shuttle roster (uptime% since ${Date}); #2 returns the shuttles active today.
+    # Both are live-computed from shuttle_error (error_type='SHUTTLE_NETWORK_STATUS', status=1).
+    notes: >-
+      downtime% = 100 - uptime%. #4 (windowed) is the primary + roster; #2 (today) is a best-effort
+      recency signal joined by shuttle_id (a link worse TODAY than its window average is degrading now).
+
+cross_module_notes:
+  - Component = per-shuttle comms link, keyed by shuttle_id (same id space as the Shuttle module, but a
+    DIFFERENT facet + a different error subset). The Shuttle module scores mechanical wear from FORK/
+    TELESCOPIC errors (frozen 2023) and does NOT consume SHUTTLE_NETWORK_STATUS -> no double-count.
+  - RCA cross-links every flagged link to the SHUTTLE module (comms drops precede pick/handling errors —
+    check that shuttle's mechanical health) and, when downtime clusters on one aisle, emits an aisle-level
+    controller/AP flag (-> the future meta-module / Controller module).
+  - Lift (module.yaml error codes 3=drive_comm, 4=communication) and Shuttle (servo-drive faults) already
+    flag "-> network"; this module is the counterpart that scores the actual comms signal.
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5   # >= this many prior snapshots -> 'trend' regime
+  # peer-z + downtime_abs + recent_spike are WITHIN-snapshot (apply immediately); recurrence is a cross-run
+  # count that is 0 at cold start by construction (honest cold-start falls out of the store being empty).
+  tiers: {ok: 85, watch: 65, warn: 40}
+  ttm_bands_hours: {critical: 48, warn: 240, watch: 720}
+  confidence:
+    coldstart_base: 0.50          # continuous downtime% metric is meaningful immediately (unlike the store-only station signal)
+    trend_base: 0.72
+
+  downtime_abs_floor_pct: 3.0     # downtime% at/below this adds no absolute penalty (fleet-normal comms drops)
+  peer_z_min_downtime_pct: 4.0    # peer_z penalty also requires downtime% >= this, so a fleet-median link is never flagged
+  recent_spike_floor_pct: 5.0     # today's downtime% above this (AND worse than the window) adds a recency penalty
+  recur_min_downtime_pct: 6.0     # recurrence counts prior runs whose downtime% >= this (downtime-specific)
+  aisle_cluster_downtime_pct: 6.0 # an aisle whose MEAN downtime% >= this (or >=2 flagged links) gets an aisle-level comms flag
+  aisle_cluster_min_links: 2
+
+  penalties:                      # weight · cap (points off 100)
+    downtime_abs:   {weight: 3.0, cap: 45}   # per 1% downtime above the floor (the core comms signal)
+    downtime_peer_z: {weight: 4.0, cap: 16}  # robust z of downtime% vs the fleet (gated by peer_z_min_downtime_pct)
+    recent_spike:   {weight: 1.5, cap: 20}   # per 1% of TODAY's downtime above recent_spike_floor_pct (only if today > window)
+    recurrence:     {weight: 6.0, cap: 30}   # per prior run this link's downtime% was >= recur_min_downtime_pct

@@ -30,8 +30,8 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 | 6 | Bin / Tote-Mechanical | [modules/bin_mech/README.md](modules/bin_mech/README.md) | ✅ built (Session 6) — per-slot bin-block/tilt: block-age + historical + cross-run recurrence (live) |
 | 7 | GTP Station + Scanner | [modules/gtp_station/README.md](modules/gtp_station/README.md) | ✅ built (Session 7) — dual-entity: 272 scanners (misread rate) + 63 stations (discrepancy rate), live data |
 | 8 | Decanting Station + Scanner | [modules/decant_station/README.md](modules/decant_station/README.md) | ✅ built (Session 8) — dual-entity: 9 decant/compaction scanners (misread rate) + 10 stations (status/throughput, no live discrepancy feed); reconciled 9 devices from GTP (each device owned by one module), live data |
-| 9 | Network / Comms | _next session_ | ⏳ planned (Quadron Network status — latency/packet-loss; cross-feature for Lift/Shuttle) |
-| 10 | Controller / Compute | — | planned |
+| 9 | Network / Comms | [modules/network/README.md](modules/network/README.md) | ✅ built (Session 9) — per-shuttle comms link (124) scored on network downtime% (Quadron Network status / SHUTTLE_NETWORK_STATUS); today-vs-window recency spike + aisle-cluster + cross-feature flags to Shuttle/meta, live data |
+| 10 | Controller / Compute | _next session_ | ⏳ planned (CPU Stats — CPU/memory saturation trend; also feeds the meta-module) |
 | 11 | System-Wide Anomaly (meta) | — | planned (last) |
 
 ## Operating the system

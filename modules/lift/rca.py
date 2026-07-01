@@ -3,7 +3,7 @@
 Given a lift's features and the penalty breakdown computed by ``health.py``,
 produce the dominant contributing signals: a one-line ``primary_cause``, a ranked
 contributor list, the error-code mix, and any cross-module flags (e.g. comms
-errors that should also inform the future Network module).
+errors that also inform the Network module — Module 9, built Session 9).
 """
 
 from __future__ import annotations

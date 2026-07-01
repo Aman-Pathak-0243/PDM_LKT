@@ -254,4 +254,33 @@ stations); hourly automation ≈ 15,000 rows/day — still within the CSV store,
 archive/delete-by-range to cap footprint and the `(module, component_id, created_at)` index keeping
 trend/RUL queries fast under MySQL later.
 
+## Fetch volume — NETWORK / COMMS sources (sampled 2026-07-01)
+
+| Dashboard / panel | Rows fetched | Notes |
+|-------------------|-------------:|-------|
+| Quadron Network status `#4` (windowed) | **124** | Per-shuttle uptime% since `${Date}`=window start; the full roster. **Windowed** (a wider window smooths the average). |
+| Quadron Network status `#2` (today) | **~100** | Per-shuttle uptime% since midnight today (shuttles active today); recency signal. |
+
+A full network fetch pulls ≈ **224 rows in ~8 s** (two light table panels; both live-computed in MSSQL
+from `shuttle_error`). One of the fastest fetches in the system.
+
+## Write footprint — per PdM run (NETWORK / COMMS)
+
+`component_health` = **124 rows/run** (one per shuttle link, the fixed roster), ≈ 1–1.5 KB/row
+(rca_json carries downtime detail + cross-feature flags). Plus 1 `pdm_run`, 1 `trigger_log`, ~2
+`panel_catalog` upserts, ~1–2 `event_log`.
+
+| Automation interval | component_health rows/day (network, 124) | growth/day | per year |
+|---------------------|-----------:|-----------:|---------:|
+| hourly | 124 × 24 = 2,976 | ~4 MB | ~1.5 GB |
+| every 15 min | 11,904 | ~16 MB | ~6 GB |
+
+Network is a fixed-roster module (124 rows/run) and a light fetch, but its **store** is what makes the
+recurrence + trend RUL work, and its **cross-feature** flags (a degrading link → the Shuttle module; an
+aisle downtime cluster → the meta layer) are the hooks the Module 11 meta-module will chain into
+compound-failure detection. Across all nine modules a single "Run all" writes ≈ **16 + 124 + 6 + ~54 +
+52 + ~40 + ~326 + 19 + 124 ≈ 761** `component_health` rows; hourly automation ≈ 18,000 rows/day — still
+comfortably within the CSV store, with archive/delete-by-range to cap footprint and the
+`(module, component_id, created_at)` index keeping trend/RUL queries fast under MySQL later.
+
 *(Subsequent sessions append their module's fetch volumes + write footprint here.)*

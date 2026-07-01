@@ -323,4 +323,30 @@ No template vars. MSSQL `lenskart_decanting`.
 (Module 7) until this session; GTP now excludes subtypes `decant`/`compaction`, so each device is
 owned by exactly one module (CLAUDE.md §7). GTP Scanner logs `#8` is a shared panel.
 
+## Session 9 — NETWORK / COMMS module
+
+Resolved + sampled 2026-07-01. Data is **live/windowed**. Component universe = **124 per-shuttle
+comms links** (`network_link`, keyed by `shuttle_id`). The single mapped candidate is genuine health
+data (not operational/inventory), but live SQL corrected the metric + component key.
+
+### Quadron Network status — `gL0OBnq7z` (folder: Maintenance) — **PRIMARY**
+Template var: `Date`. MSSQL `lenskart_quadron` (`shuttle_error`).
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Shuttle network status specific date | 4 | table | `SELECT shuttle_id, (1 - SUM(DATEDIFF(second, created_time, updated_timestamp))/elapsed_since_${Date})*100 FROM shuttle_error WHERE created_time > '${Date}' AND error_type='SHUTTLE_NETWORK_STATUS' AND status=1 GROUP BY shuttle_id` | **PRIMARY signal.** Per-shuttle network **uptime%** since `${Date}` → we set `${Date}` = window start for a **windowed** downtime% (= 100−uptime). 124-shuttle roster. **Live 2026 data** (unlike the frozen FORK/TELESCOPIC shuttle errors). |
+| shuttle/day %uptime | 2 | table | same, but `WHERE created_time > midnight today` (`GETDATE()`) | **Secondary (recency).** Per-shuttle uptime% **today** → flags links worse now than their window average (e.g. `QD_Shuttle_01_19` 29.7% window vs 67% today). Best-effort join by shuttle_id. |
+
+**Live distribution:** downtime% median 3.25%, p90 6.5%, p99 16.9%, worst `QD_Shuttle_01_19` = 29.7%
+(70.3% uptime). Aisle clustering: aisle_01 mean 6.74% (worst) vs aisle_05 1.12%.
+
+**Correction to the mapping (Session 9):** the mapping called this "latency, packet loss, link state".
+Live SQL shows it is per-shuttle **uptime% / disconnect-duration** derived from `shuttle_error`
+(`error_type='SHUTTLE_NETWORK_STATUS'`) — **no latency-ms or packet-loss-% metric**, and the component
+key is the **shuttle** (its comms link), not a per-controller/per-link device. This is a **different
+error subset** than the Shuttle module's mechanical FORK/TELESCOPIC errors (frozen 2023, which do not
+include network status), so scoring comms here does **not** double-count the Shuttle module. The two
+OPC dataloggers (`3HJAGPbVk`, `SBaBnPb4z`) are candidate future latency/packet sources (raw telemetry,
+no CSV today).
+
 *(Subsequent sessions append their module's dashboard sections here.)*

@@ -365,3 +365,65 @@ def test_decant_station_persistence_escalates():
     assert comps["DS001"].metrics["consecutive_idle_active"] == 9
     assert comps["DS009"].risk_tier == "watch"         # sustained Inactive is capped at the watch ceiling
     assert comps["DS009"].health_score >= 65
+
+
+# --------------------------- network model (Module 9) -------------------- #
+def _network_bundle():
+    # #4 windowed uptime% + #2 today uptime% (recency), live-shaped.
+    win = pd.DataFrame([{"shuttle_id": s, "Value": u} for s, u in [
+        ("QD_Shuttle_01_19", 70.3), ("QD_Shuttle_06_06", 82.4), ("QD_Shuttle_04_06", 86.5),
+        ("QD_Shuttle_01_12", 85.4), ("QD_Shuttle_03_10", 96.5), ("QD_Shuttle_05_01", 99.9),
+        ("QD_Shuttle_05_02", 99.6), ("QD_Shuttle_05_03", 98.9),
+    ]])
+    today = pd.DataFrame([{"shuttle_id": s, "Value": u} for s, u in [
+        ("QD_Shuttle_01_19", 33.0),   # today downtime 67% >> window 29.7% -> recency spike
+        ("QD_Shuttle_04_06", 68.0),   # today 32% vs window 13.5% -> recency spike
+        ("QD_Shuttle_05_01", 99.9),
+    ]])
+    return FetchBundle(frames={"windowed": win, "today": today}, rows_fetched=len(win) + len(today),
+                       panels=[], notes={"window": "now-2d"})
+
+
+def test_network_downtime_scoring_and_crossfeature():
+    from modules.network.features import compute_features as ncf
+    from modules.network.health import score as nsc
+
+    feats = ncf(_network_bundle())
+    assert feats["QD_Shuttle_01_19"]["downtime_pct"] == 29.7        # 100 - 70.3
+    assert feats["QD_Shuttle_01_19"]["aisle"] == "aisle_01"
+    assert feats["QD_Shuttle_01_19"]["today_downtime_pct"] == 67.0  # 100 - 33.0
+    assert feats["QD_Shuttle_05_01"]["downtime_pct"] == 0.1
+
+    comps = {c.component_id: c for c in nsc(feats, _NoHistory())}
+    assert comps["QD_Shuttle_01_19"].risk_tier == "critical"        # 29.7% window + 67% today spike
+    assert comps["QD_Shuttle_05_01"].risk_tier == "ok"              # healthy link
+    assert comps[list(comps)[0] if False else "QD_Shuttle_01_19"].metrics["penalties"]["recent_spike"] > 0
+    # a healthy (ok) link does NOT emit a shuttle cross-flag; a flagged one does
+    assert not comps["QD_Shuttle_05_01"].rca["cross_module_flags"]
+    assert any(x["module"] == "shuttle" for x in comps["QD_Shuttle_01_19"].rca["cross_module_flags"])
+    # aisle_01 clusters (01_19 + 01_12 flagged) -> aisle-level meta flag
+    assert any(x["module"] == "meta" for x in comps["QD_Shuttle_01_19"].rca["cross_module_flags"])
+    # worst-first ordering
+    ordered = nsc(feats, _NoHistory())
+    assert ordered[0].component_id == "QD_Shuttle_01_19"
+
+
+def test_network_recurrence_lowers_health():
+    from modules.network.features import compute_features as ncf
+    from modules.network.health import score as nsc
+
+    class _Hist:
+        def component_history(self, module, cid, limit=400):
+            if cid == "QD_Shuttle_06_06":
+                return [{"created_at": now_iso(), "health_score": 40.0,
+                         "metrics_json": {"downtime_pct": 17.6}} for _ in range(3)]
+            return []
+
+        def run_count(self, module):
+            return 3
+
+    feats = ncf(_network_bundle())
+    cold = {c.component_id: c for c in nsc(feats, _NoHistory())}
+    recur = {c.component_id: c for c in nsc(feats, _Hist())}
+    assert recur["QD_Shuttle_06_06"].metrics["recurrence_runs"] == 3
+    assert recur["QD_Shuttle_06_06"].health_score < cold["QD_Shuttle_06_06"].health_score
