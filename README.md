@@ -19,7 +19,9 @@ rate + 10 decant stations on status/throughput with no live discrepancy feed; re
 scan devices out of Module 7 so each device is owned by exactly one module, live data), and
 **Module 9: Network / Comms** (per-shuttle comms link — 124 links scored on network downtime% from
 Quadron Network status, with a today-vs-window recency spike, aisle-clustering, and cross-feature
-flags into Shuttle + the meta layer, live data) are complete. See
+flags into Shuttle + the meta layer, live data), and **Module 10: Controller / Compute** (the
+controller compute node — CPU utilization% from CPU Stats, current-state so the store provides
+sustained-high + trend, with a system-wide `meta` cross-flag, live data) are complete. See
 [`pdm_notebook.md`](pdm_notebook.md) for the full book and
 [`CLAUDE.md`](CLAUDE.md) for durable conventions.
 
@@ -47,7 +49,7 @@ process. Open `http://<host-ip>:8800`.
 
 - **Overview** — one tile per module (worst-component status, last run). Pick a
   **window** (top-right) and **Run PdM (all)**, or run a single module from its tile.
-- **Per-module page** (`/module/lift`, `/module/shuttle`, `/module/conveyor`, `/module/tracker`, `/module/gate`, `/module/bin_mech`, `/module/gtp_station`, `/module/decant_station`, `/module/network`) —
+- **Per-module page** (`/module/lift`, `/module/shuttle`, `/module/conveyor`, `/module/tracker`, `/module/gate`, `/module/bin_mech`, `/module/gtp_station`, `/module/decant_station`, `/module/network`, `/module/controller`) —
   per-component health, risk tier, predicted time-to-maintenance, confidence, regime; click
   a row for RCA + health trend; optional "Mark maintenance done". Each page has an in-page
   **Methodology** section explaining how a component's verdict and the module's overall
@@ -86,7 +88,7 @@ application-logic changes.
 core/      config, structured logging, Grafana auth/fetch/inspect, storage
            abstraction (CSV active / MySQL dormant), module registry, runner,
            scheduler, audit.
-modules/   one self-registering plugin per equipment type (lift, shuttle, conveyor, tracker, gate, bin_mech, gtp_station, decant_station, network).
+modules/   one self-registering plugin per equipment type (lift, shuttle, conveyor, tracker, gate, bin_mech, gtp_station, decant_station, network, controller).
 webapp/    FastAPI app, JSON API, services, exporting, templates, static.
 db/        MySQL schema (designed).
 docs/      the PdM book (notebook chapters + mapping).
@@ -109,8 +111,8 @@ automatically. Follow the per-module SOP in `CLAUDE.md §5`.
 - `scripts/discover_dashboards.py` — log in + list/match dashboards via `/api/search`.
 - `scripts/inspect_<module>.py` — enumerate (`meta`) + sample (`sample`) panels
   (`inspect_lift.py`, `inspect_shuttle.py`, `inspect_tracker.py`, `inspect_gate.py`,
-  `inspect_gtp.py`, `inspect_decant.py`, `inspect_network.py`, …); `inspect_gtp.py`/`inspect_decant.py`/`inspect_network.py`/`inspect_bin.py`/`inspect_gate.py`
-  have a `discover` mode. `scripts/analyze_<module>_primary.py`
+  `inspect_gtp.py`, `inspect_decant.py`, `inspect_network.py`, `inspect_controller.py`, …); the
+  `inspect_gtp/decant/network/controller/bin/gate` scripts have a `discover` mode. `scripts/analyze_<module>_primary.py`
   deep-dives a module's primary against live data before features are written.
 
 ### Tooling

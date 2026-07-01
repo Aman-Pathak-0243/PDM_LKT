@@ -1,0 +1,78 @@
+# =============================================================================
+# CONTROLLER / COMPUTE module — resolved panel mapping + thresholds.
+# Produced from live inspection + sampling on 2026-07-01 (SOP steps 2-5).
+#
+# COMPONENT (component_type = compute_node) — the controller compute node whose CPU the DBA proc
+#   reports. Universe = a SINGLE node this snapshot: 'db_controller' (the SQL/DBA database-controller
+#   server). The feature extractor keys by a host/node column IF CPU Stats ever returns per-host rows,
+#   so the module scales to N nodes automatically; today the proc returns one aggregate row.
+#
+# SIGNAL = CPU utilization% = 100 - cpu_idle, from CPU Stats #17 "CPU Utilisation"
+#   (EXEC [DBA].[dbo].[getCPUDetails] -> one row: cpu_idle, cpu_sql). cpu_sql is the SQL Server's CPU
+#   share. A healthy controller runs with plenty of idle headroom (44% utilization / 56% idle this
+#   snapshot, 41% of it SQL); a saturating controller (util climbing toward 80-95%) is a crash/throttle
+#   precursor that starves the WES and slows EVERY shuttle/lift/GTP operation.
+#
+# CURRENT-STATE (not a timeseries, unlike Conveyor): #17 returns the same single row at now-6h/2d/30d
+#   (the window does NOT filter the proc). There is NO trend in the feed and NO memory metric. As with
+#   Gate/Bin/Tracker, THE STORE overcomes this: every PdM run snapshots the current utilization%, so
+#   sustained-high + trend accrue across runs. Regular automation is what makes this predictive.
+#
+# NOTE (mapping was partly wrong, per every prior session): the mapping billed this as "CPU / memory
+#   utilization trend" across "controller compute nodes" (plural). Live SQL shows CPU-ONLY, a SINGLE
+#   node, and a current-state snapshot (no in-feed trend, no memory, no per-host breakdown). Scoped
+#   honestly. Ruled out: "JIT Frame Unallocated" (sales_order_line JIT frames = inventory, not compute);
+#   OPC dataloggers (raw per-device telemetry, no CPU).
+# =============================================================================
+module: controller
+title: Controller / Compute PdM
+component_type: compute_node
+description: >-
+  Predictive maintenance for the controller compute node(s). CPU health is inferred from current CPU
+  utilization% (100 - cpu_idle, from CPU Stats / getCPUDetails), with the SQL CPU share as context.
+  The feed is a current-state snapshot, so the store provides the sustained-high + trend signal across
+  runs. A saturating controller starves the WES -> a system-wide throttle cross-feature. No logbook.
+
+default_window: now-2d           # #17 is current-state (window does not filter it); the store provides history
+anchor_to_data_asof: false       # current snapshot, not a windowed/frozen log
+
+# ---- Data source (resolved by live inspection) ------------------------------
+dashboards:
+  cpu_stats:
+    uid: CwTEp_GSz
+    env_key: CONTROLLER__CPU_STATS
+    role: primary
+    db: DBA (MSSQL stored proc getCPUDetails)
+    cpu_panel: 17                 # "CPU Utilisation" (piechart) — EXEC [DBA].[dbo].[getCPUDetails] -> cpu_idle, cpu_sql
+    # Single row this snapshot (cpu_idle=56, cpu_sql=41). utilization% = 100 - cpu_idle.
+    notes: >-
+      utilization_pct = 100 - cpu_idle; cpu_sql = SQL Server CPU share. Current-state (identical across
+      windows). If the proc ever returns a host/node column per row, features.py keys by it (scalable to
+      N nodes); today it is one aggregate node ('db_controller').
+
+cross_module_notes:
+  - Component = the controller compute node; a saturated controller starves the WES and slows every
+    shuttle/lift/GTP operation. RCA flags 'meta' when the node is saturated -> the hook for the future
+    meta-module (Module 11) to chain compute-saturation -> system-wide throttle -> downstream errors.
+  - This is CPU-only + single-node + current-state; a future per-host CPU+memory feed (or the OPC/Kepware
+    dataloggers, no CSV today) would extend it toward the mapping's original "CPU / memory trend" intent.
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5   # >= this many prior snapshots -> 'trend' regime
+  # saturation is a WITHIN-snapshot absolute (applies immediately); sustained_high is a cross-run count
+  # that is 0 at cold start by construction (honest cold-start falls out of the store being empty).
+  tiers: {ok: 85, watch: 65, warn: 40}
+  ttm_bands_hours: {critical: 24, warn: 96, watch: 336}   # compute saturation escalates fast -> tighter bands than event modules
+  confidence:
+    coldstart_base: 0.55          # a single clear utilization% reading is meaningful immediately
+    trend_base: 0.72
+
+  saturation_floor_pct: 60.0      # utilization% at/below this adds no penalty (healthy headroom)
+  sustained_high_pct: 80.0        # consecutive recent runs with utilization% >= this escalate (crash/throttle precursor)
+  sql_dominant_share: 0.85        # cpu_sql / utilization >= this = SQL-dominated load (RCA context, not a penalty)
+  meta_flag_tier: warn            # emit the system-wide 'meta' cross-flag at this tier or worse
+
+  penalties:                      # weight · cap (points off 100)
+    saturation:     {weight: 2.5, cap: 70}   # per 1% utilization above the floor (the core compute signal)
+    sustained_high: {weight: 6.0, cap: 30}   # per consecutive prior run util% >= sustained_high_pct beyond 1 (store-driven persistence)

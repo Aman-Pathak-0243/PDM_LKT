@@ -427,3 +427,63 @@ def test_network_recurrence_lowers_health():
     recur = {c.component_id: c for c in nsc(feats, _Hist())}
     assert recur["QD_Shuttle_06_06"].metrics["recurrence_runs"] == 3
     assert recur["QD_Shuttle_06_06"].health_score < cold["QD_Shuttle_06_06"].health_score
+
+
+# --------------------------- controller model (Module 10) --------------- #
+def _cpu_bundle(cpu_idle, cpu_sql, host=None):
+    row = {"cpu_idle": cpu_idle, "cpu_sql": cpu_sql}
+    if host is not None:
+        row["host"] = host
+    return FetchBundle(frames={"cpu": pd.DataFrame([row])}, rows_fetched=1, panels=[],
+                       notes={"window": "now-2d"})
+
+
+def test_controller_cpu_saturation_gradient_and_meta():
+    from modules.controller.features import compute_features as ccf
+    from modules.controller.health import score as csc
+
+    # healthy: 44% utilization -> ok, no meta flag
+    f = ccf(_cpu_bundle(56, 41))
+    assert f["db_controller"]["utilization_pct"] == 44.0 and f["db_controller"]["cpu_sql_pct"] == 41.0
+    healthy = csc(f, _NoHistory())[0]
+    assert healthy.risk_tier == "ok" and healthy.component_type == "compute_node"
+    assert healthy.rca["cross_module_flags"] == []
+
+    # 80% -> warn + system-wide meta cross-flag
+    warn = csc(ccf(_cpu_bundle(20, 16)), _NoHistory())[0]
+    assert warn.risk_tier == "warn"
+    assert any(x["module"] == "meta" for x in warn.rca["cross_module_flags"])
+
+    # 95% -> critical
+    crit = csc(ccf(_cpu_bundle(5, 4)), _NoHistory())[0]
+    assert crit.risk_tier == "critical"
+
+
+def test_controller_sustained_high_and_scalable():
+    from modules.controller.features import compute_features as ccf
+    from modules.controller.health import score as csc
+
+    class _Hist:
+        def component_history(self, module, cid, limit=400):
+            return [{"created_at": now_iso(), "health_score": 50.0,
+                     "metrics_json": {"utilization_pct": 88.0}} for _ in range(5)]
+
+        def run_count(self, module):
+            return 5
+
+    # util 85 now + 5 prior runs >= 80% -> consecutive_high=6, sustained penalty applied
+    f = ccf(_cpu_bundle(15, 12))                       # 85% utilization
+    cold = csc(f, _NoHistory())[0]
+    sust = csc(f, _Hist())[0]
+    assert sust.metrics["consecutive_high"] == 6
+    assert sust.health_score < cold.health_score       # sustained-high lowers it further
+
+    # scalable: a host column -> one component per node
+    multi = FetchBundle(frames={"cpu": pd.DataFrame([
+        {"host": "ctrl_a", "cpu_idle": 56, "cpu_sql": 41},
+        {"host": "ctrl_b", "cpu_idle": 8, "cpu_sql": 6}])}, rows_fetched=2, panels=[],
+        notes={"window": "now-2d"})
+    fm = ccf(multi)
+    assert set(fm) == {"ctrl_a", "ctrl_b"}
+    comps = {c.component_id: c for c in csc(fm, _NoHistory())}
+    assert comps["ctrl_a"].risk_tier == "ok" and comps["ctrl_b"].risk_tier == "critical"

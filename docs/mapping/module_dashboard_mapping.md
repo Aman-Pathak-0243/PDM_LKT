@@ -241,15 +241,29 @@ clustering on an aisle raises an aisle AP/controller flag (→ the meta-module).
 
 ---
 
-## 10. Controller / Compute PdM
-**Sub-component:** Controller compute nodes
+## 10. Controller / Compute PdM  ✅ BUILT (Session 10) — RESOLVED BY LIVE INSPECTION
+**Sub-component:** the controller compute node(s). Component = a `compute_node`; universe = a **single
+node** this snapshot (`db_controller`, the SQL/DBA database–controller server). The feature extractor
+keys by a host/node column if the feed ever returns per-host rows (scalable to N nodes).
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | CPU Stats | CPU Utilization | CPU / memory utilization trend |
+| Role | Dashboard | Folder | What it provides | Verified |
+|------|-----------|--------|------------------|----------|
+| Primary | CPU Stats (`CwTEp_GSz`) | CPU Utilization | `#17` `EXEC getCPUDetails` → one row `cpu_idle, cpu_sql`. **CPU utilization%** = 100−cpu_idle; SQL CPU share as context. | ✅ 1 node, current-state |
 
-**Signal type:** CPU/memory saturation trend → controller crash/throttle.
-**Build priority:** 10 — also feed as input to meta-module.
+**Signal type:** CPU **saturation** (utilization% above a floor) + **sustained-high** across consecutive
+runs (store-driven) + trend RUL → controller crash/throttle precursor. A saturated controller starves
+the WES → a **system-wide throttle** cross-feature (RCA flags `meta`). Implemented in `modules/controller/`.
+
+> **CORRECTION (Session 10):** the mapping billed this as "CPU / memory utilization trend" across
+> "controller compute nodes" (plural). Live SQL shows **CPU-only**, a **single node**, and a
+> **current-state snapshot** — `getCPUDetails` returns one row (`cpu_idle`, `cpu_sql`) identical at
+> `now-6h`/`now-2d`/`now-30d` (the window does not filter it). No in-feed trend, no memory metric, no
+> per-host breakdown. As with Gate/Bin, the **store** provides the trend (each run snapshots the current
+> utilization). Live headroom is healthy (30–44% utilization). **Ruled out:** JIT Frame Unallocated
+> (`sales_order_line` JIT frames = inventory) and the OPC/Kepware dataloggers (raw per-device telemetry,
+> no CPU/CSV — candidate future per-host CPU+memory sources).
+
+**Build priority:** 10 — infra cross-feature (also feeds the meta layer). **Built.**
 
 ---
 

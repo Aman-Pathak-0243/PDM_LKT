@@ -349,4 +349,29 @@ include network status), so scoring comms here does **not** double-count the Shu
 OPC dataloggers (`3HJAGPbVk`, `SBaBnPb4z`) are candidate future latency/packet sources (raw telemetry,
 no CSV today).
 
+## Session 10 — CONTROLLER / COMPUTE module
+
+Resolved + sampled 2026-07-01. Data is **live/current-state**. Component universe = a **single compute
+node** this snapshot (`db_controller`, `compute_node`). The single mapped candidate is genuine health
+data, but live SQL corrected its shape (CPU-only, one node, current-state — not a "CPU/memory trend").
+
+### CPU Stats — `CwTEp_GSz` (folder: CPU Utilization) — **PRIMARY**
+No template vars. MSSQL stored proc `[DBA].[dbo].[getCPUDetails]`.
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| CPU Utilisation | 17 | piechart | `EXEC [DBA].[dbo].[getCPUDetails]` → **one row** `cpu_idle, cpu_sql` | **PRIMARY signal.** utilization% = `100 − cpu_idle`; `cpu_sql` = SQL Server CPU share. **Current-state** (identical single row at `now-6h`/`now-2d`/`now-30d` — the window does not filter the proc). Live sample: idle 56–70, sql 28–41 → 30–44% utilization (healthy). |
+
+**Correction to the mapping (Session 10):** the mapping billed this as "CPU / memory utilization trend"
+across "controller compute nodes" (plural). Live SQL shows **CPU-only**, a **single node**, and a
+**current-state snapshot** — no in-feed trend, no memory metric, no per-host breakdown. Scoped honestly
+to CPU utilization%; the store provides the sustained-high + trend across runs (like Gate/Bin). The
+feature extractor keys by a host/node column if the proc ever returns per-host rows (scalable to N nodes).
+
+### Ruled out (verified Session 10)
+| Dashboard | uid | Actual content |
+|-----------|-----|----------------|
+| JIT Frame Unallocated | `fP9A7Y0Hk` | `#2` = `select … from sales_order_line where jit_flag='true' and category='FRAME'` — **JIT order frames (inventory)**, not compute. Spurious keyword match. |
+| OPC - GTP/Lift Datalogger | `3HJAGPbVk` / `SBaBnPb4z` | Raw per-device OPC telemetry (`device_id, value, timestamp`) — no CPU/memory, no CSV. Candidate **future** per-host source. |
+
 *(Subsequent sessions append their module's dashboard sections here.)*

@@ -283,4 +283,32 @@ compound-failure detection. Across all nine modules a single "Run all" writes �
 comfortably within the CSV store, with archive/delete-by-range to cap footprint and the
 `(module, component_id, created_at)` index keeping trend/RUL queries fast under MySQL later.
 
+## Fetch volume — CONTROLLER / COMPUTE sources (sampled 2026-07-01)
+
+| Dashboard / panel | Rows fetched | Notes |
+|-------------------|-------------:|-------|
+| CPU Stats `#17` | **1** | `EXEC getCPUDetails` → one row (`cpu_idle, cpu_sql`). Current-state (identical across windows). |
+
+A full controller fetch pulls **1 row in ~1.8 s** — the **smallest + fastest fetch in the system** (one
+stored-proc call). The window does not scale it (current-state).
+
+## Write footprint — per PdM run (CONTROLLER / COMPUTE)
+
+`component_health` = **1 row/run** (one compute node; scales with N nodes if per-host CPU appears), ≈
+0.6–1 KB/row. Plus 1 `pdm_run`, 1 `trigger_log`, 1 `panel_catalog` upsert, ~1–2 `event_log`.
+
+| Automation interval | component_health rows/day (controller, 1) | growth/day | per year |
+|---------------------|-----------:|-----------:|---------:|
+| hourly | 24 | ~30 KB | ~11 MB |
+| every 15 min | 96 | ~120 KB | ~44 MB |
+
+Controller is the **smallest writer** in the system, but its **store** is essential: the feed is a
+current-state snapshot with no in-feed trend, so sustained-high + trend RUL exist **only** because the
+store snapshots the current CPU each run — **regular automation is what makes it predictive**, letting it
+warn before a controller saturates. Its `meta` cross-flag is the hook the Module 11 meta-module chains
+into compound-failure detection. Across all ten modules a single "Run all" writes ≈ **16 + 124 + 6 + ~54
++ 52 + ~40 + ~326 + 19 + 124 + 1 ≈ 762** `component_health` rows; hourly automation ≈ 18,000 rows/day —
+still comfortably within the CSV store, with archive/delete-by-range to cap footprint and the
+`(module, component_id, created_at)` index keeping trend/RUL queries fast under MySQL later.
+
 *(Subsequent sessions append their module's fetch volumes + write footprint here.)*

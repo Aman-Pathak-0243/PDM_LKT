@@ -21,8 +21,9 @@ from modules import bin_mech  # noqa: E402,F401
 from modules import gtp_station  # noqa: E402,F401
 from modules import decant_station  # noqa: E402,F401
 from modules import network  # noqa: E402,F401
+from modules import controller  # noqa: E402,F401
 
-# from modules import controller   # next session (Module 10)
+# from modules import meta   # next session (Module 11, System-Wide Anomaly Layer)
 
 __all__ = ["lift", "shuttle", "conveyor", "tracker", "gate", "bin_mech", "gtp_station",
-           "decant_station", "network"]
+           "decant_station", "network", "controller"]

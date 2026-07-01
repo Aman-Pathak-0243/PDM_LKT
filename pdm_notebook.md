@@ -31,8 +31,8 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 | 7 | GTP Station + Scanner | [modules/gtp_station/README.md](modules/gtp_station/README.md) | ✅ built (Session 7) — dual-entity: 272 scanners (misread rate) + 63 stations (discrepancy rate), live data |
 | 8 | Decanting Station + Scanner | [modules/decant_station/README.md](modules/decant_station/README.md) | ✅ built (Session 8) — dual-entity: 9 decant/compaction scanners (misread rate) + 10 stations (status/throughput, no live discrepancy feed); reconciled 9 devices from GTP (each device owned by one module), live data |
 | 9 | Network / Comms | [modules/network/README.md](modules/network/README.md) | ✅ built (Session 9) — per-shuttle comms link (124) scored on network downtime% (Quadron Network status / SHUTTLE_NETWORK_STATUS); today-vs-window recency spike + aisle-cluster + cross-feature flags to Shuttle/meta, live data |
-| 10 | Controller / Compute | _next session_ | ⏳ planned (CPU Stats — CPU/memory saturation trend; also feeds the meta-module) |
-| 11 | System-Wide Anomaly (meta) | — | planned (last) |
+| 10 | Controller / Compute | [modules/controller/README.md](modules/controller/README.md) | ✅ built (Session 10) — single compute node (`db_controller`) scored on CPU utilization% (CPU Stats / getCPUDetails); current-state so store provides sustained-high + trend; system-wide `meta` cross-flag, live data |
+| 11 | System-Wide Anomaly (meta) | _next session_ | ⏳ planned (last) — correlate all modules' cross-flags (network/controller/tracker/…) into compound failure chains |
 
 ## Operating the system
 - [README.md](README.md) — operator + developer guide (install, run, LAN access, dashboards).
