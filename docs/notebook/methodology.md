@@ -146,6 +146,20 @@ get a sharper RUL than time-only modules:
   time and project the health trajectory against time. The regime label and confidence make
   the basis explicit either way.
 
+### Current-state + recurrence assets (state-sampling)
+
+Some assets expose neither a fault log nor a cycle counter — only a **current state** that a
+short-retention panel snapshots (Tracker's bad-tracker set, Conveyor's queue depth, Gate's
+open/close status). For these the leading indicator is **anomaly + recurrence + persistence**:
+a healthy unit shows isolated, transient anomalies; a degrading one **clusters**, **persists
+across consecutive runs**, or **recurs run after run**. The single fetch sees only "now", so
+the store does the predictive work — recurrence/persistence are *computed from the accumulated
+snapshots*, not from any one fetch. Where a duration is observable (e.g. Gate's minutes stuck
+non-closed, from `updated_timestamp`), it is added as a **response-latency** signal so the
+first detection does not have to wait for history. This is why running these modules on regular
+**automation** is what makes them predictive at all — each run is a sample that sharpens the
+longitudinal signal.
+
 ## 11. Scalability and consistency
 
 - Scoring helpers (tiers, normalisation) live in `core/registry.py` so all modules

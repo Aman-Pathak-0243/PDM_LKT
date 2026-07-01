@@ -16,7 +16,8 @@ from modules import lift  # noqa: E402,F401
 from modules import shuttle  # noqa: E402,F401
 from modules import conveyor  # noqa: E402,F401
 from modules import tracker  # noqa: E402,F401
+from modules import gate  # noqa: E402,F401
 
-# from modules import gate   # next session
+# from modules import bin_mech   # next session (Module 6)
 
-__all__ = ["lift", "shuttle", "conveyor", "tracker"]
+__all__ = ["lift", "shuttle", "conveyor", "tracker", "gate"]

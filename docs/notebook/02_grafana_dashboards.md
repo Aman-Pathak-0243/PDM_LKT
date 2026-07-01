@@ -161,4 +161,35 @@ it is a shuttle+lift error union keyed by `robot_id` (17,368 rows: 14,012 SHUTTL
 
 ---
 
+## Session 5 — GATE / Door-actuator module
+
+Resolved + sampled 2026-07-01. Data is **live/current**. Component universe = **52 gates**
+(`aisle_<NN>_level_<NN>_<FG|RG>`, 26 front + 26 rear). **Current-state + latency + recurrence**
+module (Tracker-family). One correction to the mapping (below).
+
+### Quadron-gate-status — `5gFdGgwnz` (folder: Maintenance) — **PRIMARY**
+No template vars. MSSQL `lenskart_quadron.gate` (+ `gate_zone_mapping`, `aisle_zone`).
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Gate status | 2 | table | `select distinct id, status(1=CLOSED/2=OPEN REQUEST INITIATED/3=OPEN), aisle` from `gate` join `gate_zone_mapping` join `aisle_zone` | **PRIMARY signal.** Current state of all **52 gates** = the roster + component universe. **Current-state** (52 rows identical at `now-2d` and `now-90d`; window not server-filtered). Live snapshot: 51 CLOSED, 1 OPEN. |
+| OPEN/REQUESTED gate's | 4 | table | same projection, `where status >= 2 and status <= 3` | **Context.** Currently open / open-request-initiated subset — integrity cross-check of #2's non-closed set (1 row when 1 gate open). |
+
+The gate table has an `updated_timestamp` (last status change) but #2/#4 do **not** project it,
+so response-latency (minutes stuck non-closed) is read from Quadron Alerts (below).
+
+### Quadron Alerts — `VxY5Zls7z` (folder: Quadron) — **SECONDARY (latency; shared with Shuttle)**
+No vars. Panel #2 (`message`) is a `UNION` of many operational alerts. Subquery **H** emits, for
+every `gate where status > 1`: `"<id[:18]> front_gate|rear_gate open initiated|opened for
+DATEDIFF(MINUTE, updated_timestamp, GETDATE()) minutes"`. Parsed back to the gate id
+(`prefix + FG/RG`) → per-gate **stuck_minutes** (response latency). Non-gate rows (shuttle / lift
+/ buffer / scanner) are ignored. (This is the same panel the Shuttle module reads for shuttle
+alerts — cross-module reuse, CLAUDE.md §7.)
+
+### QUADRON ERROR HISTORY — `K2QzauWVz` (folder: Quadron) — **DROPPED (NOT a gate source)**
+Panel #2 SQL = `select shuttle_id, error_type, error_desc, created_time, updated_timestamp from
+shuttle_error …` (94 rows). **Correction to the mapping:** the mapping listed this as the Gate
+secondary ("Gate-related error codes"). Live SQL shows it has **no gate/id column** — it is
+`shuttle_error` and is the **Shuttle module's primary**. **Dropped as a gate source.**
+
 *(Subsequent sessions append their module's dashboard sections here.)*

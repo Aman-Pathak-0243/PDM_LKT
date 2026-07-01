@@ -26,8 +26,8 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 | 2 | Shuttle | [modules/shuttle/README.md](modules/shuttle/README.md) | ✅ built (Session 2) — cycles-based RUL |
 | 3 | Conveyor | [modules/conveyor/README.md](modules/conveyor/README.md) | ✅ built (Session 3) — per-zone congestion (live data) |
 | 4 | Tracker / Position-Sensor | [modules/tracker/README.md](modules/tracker/README.md) | ✅ built (Session 4) — per-location cluster + cross-run recurrence |
-| 5 | Gate | _next session_ | ⏳ planned (Quadron-gate-status, QUADRON ERROR HISTORY) |
-| 6 | Bin / Tote Mechanical | — | planned |
+| 5 | Gate / Door-Actuator | [modules/gate/README.md](modules/gate/README.md) | ✅ built (Session 5) — per-gate open/close state + response latency + stuck persistence (live) |
+| 6 | Bin / Tote Mechanical | _next session_ | ⏳ planned (Bin Block History, Bin blocked/tilted) |
 | 7 | GTP Station + Scanner | — | planned |
 | 8 | Decanting Station + Scanner | — | planned |
 | 9 | Network / Comms | — | planned (cross-feature for Lift/Shuttle) |

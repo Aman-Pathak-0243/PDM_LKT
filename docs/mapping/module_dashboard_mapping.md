@@ -50,16 +50,25 @@ Scope: Equipment-health modules only. Inventory/order/decant-putaway dashboards 
 
 ---
 
-## 3. Gate PdM
-**Sub-component:** Quadron gates (actuators)
+## 3. Gate PdM  ✅ BUILT (Session 5) — RESOLVED BY LIVE INSPECTION
+**Sub-component:** Quadron gates (door actuators). Roster = **52 units**
+(`aisle_<NN>_level_<NN>_<FG|RG>` — front/rear gate per aisle+level; 26 FG + 26 RG),
+taken from Quadron-gate-status.
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | Quadron-gate-status | Maintenance | Gate open/close states, faults |
-| Secondary | QUADRON ERROR HISTORY | Quadron | Gate-related error codes |
+| Role | Dashboard | Folder | What it provides | Verified |
+|------|-----------|--------|------------------|----------|
+| Primary | Quadron-gate-status (`5gFdGgwnz`) | Maintenance | `#2` current state of all 52 gates: `id, status(1=CLOSED/2=OPEN REQUEST INITIATED/3=OPEN), aisle`. `#4` = open/requested subset. **Current-state** (window not server-filtered). | ✅ 52 gates |
+| Secondary (latency) | Quadron Alerts (`VxY5Zls7z`) | Quadron | `#2` free-text `… front_gate|rear_gate open initiated|opened for N minutes` → per-gate stuck-minutes (response latency, from `gate.updated_timestamp`). Shared with the Shuttle module. | ✅ panel #2 |
 
-**Signal type:** Open/close fault pattern + response-latency drift → actuator degradation.
-**Build priority:** 5 — event-frequency anomaly, quick win.
+**Signal type:** open/close state + **response-latency** (minutes stuck non-closed) + cross-run
+**non-closed recurrence/persistence** (from the store) + peer deviation → door-actuator
+degradation. Implemented in `modules/gate/`.
+
+> **CORRECTION (Session 5):** the mapping listed **QUADRON ERROR HISTORY** (`K2QzauWVz`) as the
+> Gate secondary ("Gate-related error codes"). Live SQL shows `#2` is **`shuttle_error` only**
+> (`shuttle_id, error_type, error_desc`; 94 rows, **no gate/id column**) — it is the Shuttle
+> module's primary. **Dropped as a gate source.** The real gate signal is Quadron-gate-status
+> (current open/close state) + Quadron Alerts (stuck-minutes latency).
 
 ---
 

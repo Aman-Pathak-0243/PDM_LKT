@@ -1,0 +1,96 @@
+# =============================================================================
+# GATE / Door-actuator module — resolved panel mapping + thresholds.
+# Produced from live inspection + sampling on 2026-07-01 (SOP steps 3-5).
+#
+# COMPONENT = each physical gate (52 units). id = aisle_<NN>_level_<NN>_<FG|RG>
+# (front-gate FG / rear-gate RG per aisle+level; 26 FG + 26 RG across 6 aisles).
+# The gate table's status enum is 1=CLOSED, 2=OPEN REQUEST INITIATED, 3=OPEN.
+#
+# Quadron-gate-status #2 ("Gate status") is CURRENT-STATE: the same 52 rows come back
+# at now-2d and now-90d (the dashboard window does NOT filter it), one row per gate with
+# its current status + aisle. A healthy gate rests CLOSED and opens only briefly; a
+# degrading ACTUATOR gets caught/stuck in OPEN REQUEST INITIATED (issued an open it can't
+# complete) or stuck OPEN (won't return to closed). The 2-day retention is overcome by OUR
+# store: each PdM run snapshots gate state, so stuck-persistence + non-closed recurrence
+# accrue across runs (CLAUDE.md §6).
+#
+# The response-LATENCY signal (minutes a gate has been stuck non-closed) is NOT projected
+# by #2/#4 — it is emitted by Quadron Alerts #2 (subquery H): for every `gate where
+# status > 1` it prints "<id[:18]> front_gate|rear_gate open initiated|opened for
+# DATEDIFF(MINUTE, updated_timestamp, GETDATE()) minutes". We parse that back to the gate id
+# (prefix + FG/RG) to get per-gate stuck_minutes. This is the actuator-degradation leading
+# indicator, so Quadron Alerts is the SECONDARY (latency) source.
+#
+# QUADRON ERROR HISTORY (K2QzauWVz) #2 was the mapping's claimed gate secondary — live SQL
+# shows it is `shuttle_error` only (shuttle_id, error_type, error_desc; 94 rows, NO gate
+# column). It is the Shuttle module's primary and carries no gate signal -> dropped here.
+# =============================================================================
+module: gate
+title: Gate / Door-Actuator PdM
+component_type: gate
+description: >-
+  Predictive maintenance for ASRS Quadron gates (door actuators; one front + one rear gate
+  per aisle+level). Health is inferred from each gate's current open/close state, how long
+  it has been stuck non-closed (response latency), and — from the accumulated store — how
+  often it is caught non-closed or stuck across runs and how far that deviates from peer
+  gates. No maintenance logbook is used.
+
+default_window: now-2d           # panel is current-state; window is nominal (drives fetch time range)
+anchor_to_data_asof: false       # no timestamp in the gate-status panel; snapshot is "now"
+
+# ---- Data sources (resolved by live inspection) -----------------------------
+dashboards:
+  quadron_gate_status:            # PRIMARY (the gate roster + current state)
+    uid: 5gFdGgwnz
+    env_key: GATE__QUADRON_GATE_STATUS
+    role: primary
+    db: lenskart_quadron (MSSQL)
+    signal_panel: 2               # "Gate status" — distinct id, status(CASE), aisle
+    context_panel: 4              # "OPEN/REQUESTED gate's" — same, status 2..3 subset (cross-check)
+    # #2 SQL: select distinct id, status(1=CLOSED/2=OPEN REQUEST INITIATED/3=OPEN), aisle
+    #         from gate join gate_zone_mapping on gate=gate.id join aisle_zone on zone.
+    # #4 SQL: same projection, where status >= 2 and status <= 3 (currently open/opening).
+    fields: [id, status, aisle]
+    notes: >-
+      Current-state (52 rows, unchanged across windows). Component universe = the 52 gate ids.
+      Every gate is scored each run (fixed roster), unlike the tracker's dynamic anomaly set.
+
+  quadron_alerts:                 # SECONDARY (response latency; also the Shuttle secondary)
+    uid: VxY5Zls7z
+    env_key: GATE__QUADRON_ALERTS
+    role: secondary
+    db: lenskart_quadron (MSSQL)
+    signal_panel: 2               # "Quadron Alerts" — free-text message rows
+    fields: [message]
+    parse: >-
+      Rows matching "<prefix> front_gate|rear_gate open initiated|opened for <N> minutes"
+      -> gate id = prefix + (FG if front_gate else RG); stuck_minutes = N. Only non-closed
+      gates (status > 1) appear. Non-gate rows (shuttle/lift/buffer/scanner) are ignored.
+    notes: >-
+      Same panel the Shuttle module reads for shuttle alerts — cross-module reuse (CLAUDE.md §7).
+      Gate reads only the gate-stuck messages; if a non-closed gate has no alert row, its
+      stuck_minutes is unknown (0) and it is still scored on status + persistence.
+
+cross_module_notes:
+  - QUADRON ERROR HISTORY (K2QzauWVz #2) is shuttle_error only (NO gate column) -> dropped as a gate source; it is the Shuttle module's primary.
+  - Quadron Alerts (VxY5Zls7z #2) is shared with the Shuttle module (shuttle alerts) — Gate parses only the front_gate/rear_gate stuck-duration messages.
+  - A whole aisle's gates stuck at once is a candidate cross-feature for a future Zone-Controller / Network module (common-cause), surfaced in RCA.
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5   # >= this many prior snapshots -> 'trend' regime
+  history_min_runs_for_rate: 3    # >= this many prior runs before non_closed_rate/peer_z activate
+  tiers: {ok: 85, watch: 65, warn: 40}
+  stuck_grace_minutes: 2          # a gate non-closed <= this is treated as normal operation (no latency penalty)
+  status_codes: {closed: 1, open_request: 2, open: 3}
+  penalties:                      # weight · cap (points off 100)
+    stuck_latency:    {weight: 3.0,  cap: 62}   # per minute stuck non-closed beyond grace (~7min->watch, ~15->warn, ~22->critical alone)
+    open_request:     {weight: 8.0,  cap: 8}    # caught in OPEN REQUEST INITIATED (mid-actuation, flat)
+    persistence:      {weight: 12.0, cap: 36}   # per consecutive run non-closed beyond the first
+    stuck_recurrence: {weight: 6.0,  cap: 24}   # per prior run this gate was stuck (longitudinal)
+    non_closed_rate:  {weight: 35.0, cap: 22}   # fraction of prior runs non-closed (needs >= min_runs_for_rate)
+    peer_z:           {weight: 5.0,  cap: 18}   # robust z of non_closed_rate vs peer gates
+  confidence:
+    coldstart_base: 0.42
+    trend_base: 0.72
+  ttm_bands_hours: {critical: 48, warn: 240, watch: 720}

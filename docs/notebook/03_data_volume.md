@@ -128,4 +128,34 @@ is its strongest signal, so its longitudinal history is doing predictive work th
 ~54 = ~200** `component_health` rows; hourly automation ≈ 4,800 rows/day — still well
 within the CSV store, with archive/delete-by-range to cap footprint.
 
+## Fetch volume — GATE sources (sampled 2026-07-01)
+
+| Dashboard / panel | Rows fetched | Notes |
+|-------------------|-------------:|-------|
+| Quadron-gate-status `#2` | **52** | **Current-state** (identical at `now-2d` and `now-90d`). One row per gate = the roster. |
+| Quadron-gate-status `#4` | 1–2 | Open/open-requested subset (= the non-closed gates); integrity cross-check. |
+| Quadron Alerts `#2` | ~20–30 | Free-text alert rows (UNION); only the `front_gate`/`rear_gate` messages (one per non-closed gate) are parsed for latency. |
+
+A full gate fetch pulls ≈ **75–85 rows** in ~5–6 s (three light table panels). The window is
+nominal (the gate panel is current-state); it does not scale the fetch.
+
+## Write footprint — per PdM run (GATE)
+
+`component_health` = **52 rows/run** (one per gate, the fixed roster), ≈ 1–1.5 KB/row
+(rca_json + metrics_json carry status, latency, and the cross-run stats). Plus 1 `pdm_run`,
+1 `trigger_log`, up to 3 `panel_catalog` upserts, ~1–2 `event_log`.
+
+| Automation interval | component_health rows/day (gate, 52) | growth/day | per year |
+|---------------------|-----------:|-----------:|---------:|
+| hourly | 52 × 24 = 1,248 | ~1.5 MB | ~0.5 GB |
+| every 15 min | 4,992 | ~6 MB | ~2.2 GB |
+
+Gate is a fixed-roster module (52 rows/run regardless of state) whose store is essential:
+persistence + non-closed recurrence — its strongest signals — only exist because state is
+snapshotted repeatedly, so **regular automation is what makes it predictive**. Across all five
+modules a single "Run all" writes ≈ **16 + 124 + 6 + ~54 + 52 = ~250** `component_health` rows;
+hourly automation ≈ 6,000 rows/day — still comfortably within the CSV store, with
+archive/delete-by-range to cap footprint and the `(module, component_id, created_at)` index
+keeping trend/RUL queries fast under MySQL later.
+
 *(Subsequent sessions append their module's fetch volumes + write footprint here.)*
