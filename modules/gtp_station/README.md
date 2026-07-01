@@ -6,11 +6,17 @@ the first module that scores **two physical component types** in one plugin, bec
 mapped signal is dual — *"scanner misread-rate trend + station downtime pattern → scanner/
 station hardware failure"* — and both signals are strongly present in live data:
 
-- **`gtp_scanner`** — a barcode scan device. **272 devices** this snapshot: pick-station slot
-  scanners (`GS<NN>-SL<NN>`), inbound scanners (`aisle_<NN>_inbound_scanner_<NN>`), GTP/zone/
-  compaction scanners, and diverters. **Signal = misread rate** = `NoReadCount /
-  (ReadCount + NoReadCount)`. A healthy scanner reads nearly every barcode (fleet median
-  **0.3%** misread); a dirty/failing/mis-aimed scanner's no-read rate climbs.
+- **`gtp_scanner`** — a barcode scan device. **263 devices** (272 in the feed minus the 9
+  decant/compaction devices now owned by Module 8 — see below): pick-station slot scanners
+  (`GS<NN>-SL<NN>`), inbound scanners (`aisle_<NN>_inbound_scanner_<NN>`), GTP/zone scanners, and
+  diverters. **Signal = misread rate** = `NoReadCount / (ReadCount + NoReadCount)`. A healthy
+  scanner reads nearly every barcode (fleet median **0.3%** misread); a dirty/failing/mis-aimed
+  scanner's no-read rate climbs.
+
+  > **Session 8:** the 7 `aisle_<NN>_decant_diverter` + 2 `Compaction_scanner*` devices (subtypes
+  > `decant`/`compaction`) are now **excluded** here and **owned by the Decanting Station + Scanner
+  > module (Module 8)** — each device is owned by exactly one module (CLAUDE.md §7). The exclusion is
+  > `module.yaml → scanner.exclude_subtypes`; GTP Scanner logs `#8` is a **shared** panel.
 - **`gtp_station`** — a GTP pick station. **63 stations** (`GS001`–`GS063`). **Signal =
   per-station pick-verification discrepancy rate** (verification_events) + peer deviation +
   cross-run recurrence/trend. `active_status` (Active/Inactive) is **context**, plus a
@@ -45,7 +51,7 @@ reached**. Tunables live in [`module.yaml`](module.yaml); the pipeline is
 
 | Role | Dashboard | Panel | Fields used | Use |
 |------|-----------|-------|-------------|-----|
-| **Primary (scanner)** | GTP Scanner logs (`pK7-8NmVz`) | `#8` "Scanner Read /No read Data" | `scanner, ReadCount, NoReadCount, efficiency_percentage` | Per-scanner misread rate + the **scanner universe** (272 devices). |
+| **Primary (scanner)** | GTP Scanner logs (`pK7-8NmVz`) | `#8` "Scanner Read /No read Data" | `scanner, ReadCount, NoReadCount, efficiency_percentage` | Per-scanner misread rate + the **scanner universe** (263 devices, after excluding the 9 decant/compaction devices owned by Module 8). |
 | Secondary (scanner volume) | GTP Scanner logs | `#4` "Scanner Hits" | `scanner, hits` | Per-scanner usage/volume proxy (best-effort). |
 | **Primary (station)** | Discrepancy Report Events (`D6sQle2Vz`) | `#2` "Discrepancy Report Events" | `station, operation_type, user, container, type, discrepancy_type, create_time` | Per-station pick-verification discrepancies over the window. |
 | **Primary (station roster)** | GTP Stations (`GlGBwgY4z`) | `#2` "Station Summary" | `id, Type, operation_type, active_status, updated_on` | The **63-station universe** + Active/Inactive status + recency. |
@@ -147,10 +153,10 @@ discrepancies: 65 (32.5/day, +4.9σ vs peers) — scanner/PTL/pick mechanism sus
 across N consecutive runs — station down (verify if intentional)"*, or the healthy states
 *"Reading cleanly (0.0% misread over 3,769 scans)"* / *"Nominal — 5 pick discrepancies"*.
 
-**Cross-module / cross-entity flags:** a `decant_*` / `Compaction_*` scanner is flagged as
-belonging to the **Decanting Station (Module 8)** / compaction line (it surfaces in the GTP
-scanner feed but is another module's asset); a flagged station points at its slot scanner and
-vice-versa; and a **corroboration** flag is added when a station AND its `GS<NN>-SL<NN>` scanner
+**Cross-module / cross-entity flags:** `decant_*` / `Compaction_*` scan devices are **no longer
+scored here** — they are excluded and owned by the **Decanting Station module (Module 8)** as of
+Session 8 (each device owned by exactly one module); a flagged station points at its slot scanner
+and vice-versa; and a **corroboration** flag is added when a station AND its `GS<NN>-SL<NN>` scanner
 are **both** flagged — the same physical hardware cause.
 
 ## 5. How the overall module status is reached
@@ -205,7 +211,7 @@ See `/module/gtp_station` (with its in-page Methodology section), `scripts/inspe
   would give a within-fetch trend and let misreads be normalised by live throughput.
 - **`decision_reason`** from `scanner_events` (why a no-read happened) would sharpen scanner RCA
   once the raw feed is fetchable.
-- When **Module 8 (Decanting Station + Scanner)** is built, reconcile the `decant_*` scanners
-  (tagged here) so each device is owned by exactly one module.
+- **Module 8 (Decanting Station + Scanner)** was built in Session 8 and now **owns** the `decant_*`
+  + `Compaction_*` scan devices (excluded here via `scanner.exclude_subtypes`) — done.
 - As automation accumulates runs, the **trend** RUL and recurrence penalties sharpen
   automatically — no code change.

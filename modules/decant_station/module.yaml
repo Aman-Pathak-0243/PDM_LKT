@@ -1,0 +1,142 @@
+# =============================================================================
+# DECANTING STATION + SCANNER module — resolved panel mapping + thresholds.
+# Produced from live inspection + sampling on 2026-07-01 (SOP steps 2-5).
+#
+# This module scores TWO physical component types under one plugin (as gtp_station does):
+#
+#   SCANNER (component_type = decant_scanner) — a decant/compaction-line barcode scan device
+#     that surfaces in the GTP scanner_events feed. 9 devices this snapshot: 7 decant infeed
+#     diverter-scanners (aisle_0N_decant_diverter, incl. aisle_01_decant_diverter_2) + 2
+#     compaction scanners (Compaction_scanner, Compaction_scanner_2). SIGNAL = misread rate =
+#     NoReadCount / (ReadCount + NoReadCount) per device over the window. A healthy scanner reads
+#     nearly everything (decant diverters 0.008-0.17% misread this snapshot); a dirty/failing
+#     scanner's no-read rate climbs (both compaction scanners ~4% -> watch).
+#     RECONCILIATION (Session 8): these devices were previously scored by the GTP module (Module 7,
+#     subtype decant/compaction). They are now OWNED here and EXCLUDED from GTP (gtp_station
+#     module.yaml -> scanner.exclude_subtypes), so each device is owned by exactly one module.
+#
+#   STATION (component_type = decant_station) — a decant operator station. 10 stations
+#     (DS001..DS010) from Decanting station report #2 (roster + Active/Inactive). SIGNAL is
+#     necessarily COARSE: there is NO live per-station fault/discrepancy feed (see DROPPED below),
+#     so a station is scored on active-status/offline-persistence + an idle-while-active anomaly
+#     (Active + zero decanted cartons while the decant line is busy) that only escalates when it
+#     PERSISTS across runs (store-driven). active_status is context (a station may be idle because
+#     unstaffed, not broken); cold-start stations are honestly reported ok at low confidence.
+#
+# WHY BOTH: the module is "Decanting Station + Scanner" and the mapped signal is "per-station
+# scan-failure / discrepancy climb -> scanner or station degradation". The live, strong signal is
+# the SCANNER misread rate; the STATION signal is coarse (roster/status/throughput only).
+#
+# WINDOW MATTERS: GTP Scanner logs #8 and StationWise Decanted Cartons Count #2 are time-FILTERED
+# (create_time / updated_date BETWEEN $__timeFrom .. $__timeTo), so a wider window sharpens the
+# misread rate + throughput. Decanting station report #2 is a current roster snapshot (10 rows).
+#
+# DROPPED as decant-health sources (verified by live SQL/sampling, Session 8):
+#   Discrepancy Marked Barcode (E_nYUnU4z) #2 + Discrepancy Marked Carton (LQMn4RU4k) #2 = DRILL-DOWNS
+#     into discrepancy_details filtered by ${Serial_No} / ${Carton_Id} (one barcode/carton at a time).
+#     discrepancy_details has NO station column (keyed carton_id/serial_id/tote_id) and the data is
+#     FROZEN at 2022 (sampled create_timestamp 2022-12-21). It CANNOT yield a live per-station
+#     discrepancy rate. The mapping (§8) mislabeled these "barcode/carton scan-failure rate". Dropped.
+#   Station-Material Wise Decants (3TbhR4TSz) #2 requires a ${hsn_classification} template var (no
+#     population without it) — a per-material load profile, not a health signal. Not fetched.
+# =============================================================================
+module: decant_station
+title: Decanting Station + Scanner PdM
+component_type: station/scanner
+description: >-
+  Predictive maintenance for decant operator stations and decant/compaction-line barcode scanners.
+  Scanner health is inferred from per-scanner misread rate (NoRead/(Read+NoRead)); station health —
+  which has no live fault feed — from active/inactive status, offline-persistence, and an
+  idle-while-active anomaly that escalates only when it persists across runs. No maintenance logbook.
+
+default_window: now-2d           # scanner #8 + throughput #2 are time-filtered; a wider window sharpens rates
+anchor_to_data_asof: false       # windowed rates (not a frozen log); the fetch window IS the observation window
+
+# ---- Data sources (resolved by live inspection) -----------------------------
+dashboards:
+  gtp_scanner_logs:               # PRIMARY (scanner): misread rate for decant/compaction devices
+    uid: pK7-8NmVz
+    env_key: DECANT_STATION__GTP_SCANNER_LOGS
+    role: primary
+    db: lenskart_gtp (MSSQL)
+    misread_panel: 8              # "Scanner Read /No read Data" — scanner, ReadCount, NoReadCount, efficiency_percentage
+    include_subtypes: [decant, compaction]   # keep ONLY decant/compaction devices (the rest belong to gtp_station)
+    # SHARED panel with the GTP module. #8 is windowed. We fetch it and filter to the 9 decant/compaction
+    # devices (matched on name: "decant" / "compaction"). aisle_0N parsed from decant-diverter names.
+    notes: >-
+      misread_rate = NoReadCount / (ReadCount + NoReadCount) per device. Volume-gated: a device with
+      few scans in the window gets a scaled penalty + lower confidence. Peer-z is computed over the
+      decant-module scanner fleet (the 9 devices), gated by min volume + a minimum misread, so the
+      clean decant diverters are not flagged and the elevated compaction scanners are.
+
+  decanting_station_report:       # PRIMARY (station roster + status)
+    uid: B4i1-HpVz
+    env_key: DECANT_STATION__DECANTING_STATION_REPORT
+    role: primary
+    db: lenskart_decanting (MSSQL)
+    signal_panel: 2               # "Decanting Station Report" — Station ID, active_status (Active/Inactive), User
+    ignore_panels: [4]            # #4 "Material Type Available" = partition inventory by hsn_classification (not health)
+    # 10 stations (DS001..DS010). active_status Active/Inactive (9/1 this snapshot). Current roster
+    # snapshot (not window-filtered). Defines the STATION component universe = the 10-station roster.
+    notes: >-
+      Station universe + Active/Inactive status + assigned user. active_status is context (a station
+      may be legitimately Inactive/unstaffed); the store adds an offline-persistence signal across runs.
+
+  stationwise_decanted_cartons:   # SECONDARY (station): per-station throughput (windowed)
+    uid: n1oZnY_Vz
+    env_key: DECANT_STATION__STATIONWISE_DECANTED_CARTONS
+    role: secondary
+    db: lenskart_decanting (MSSQL)
+    signal_panel: 2               # "Station-Wise-Decanted-Cartons" — station_id, carton_count (grn_pick_list x hu_carton_mapping status=2, updated_date in window)
+    # Per-station decanted-carton count over the window (time-filtered). Used to detect the
+    # idle-while-active anomaly (Active station decanting 0 cartons while the line is busy) and as a
+    # utilization/activity baseline. Low throughput alone is NOT penalized (it may just be low load).
+    notes: >-
+      Per-station carton_count over the window -> throughput/day + line-busy detection. A station is
+      "idle-while-active" only if is_active AND carton_count<=idle_floor AND the whole decant line is
+      busy (total cartons >= line_busy_min_cartons); a single idle window is normal, so only
+      idle-while-active PERSISTING across runs is penalized (store-driven recurrence).
+
+cross_module_notes:
+  - The 9 decant/compaction scan devices were scored by the GTP module (Module 7) until Session 8, when
+    they were reconciled here. GTP now EXCLUDES subtypes decant/compaction (gtp_station module.yaml ->
+    scanner.exclude_subtypes; features.py drops them from the universe + peer baseline). Each device is
+    now owned by exactly one module (CLAUDE.md §7). GTP Scanner logs (pK7-8NmVz) #8 is a SHARED panel.
+  - Decant diverters are per-AISLE infeed scanners (aisle_0N_decant_diverter); decant stations are
+    operator stations (DS0NN). There is NO 1:1 device<->station mapping (unlike GTP's GS<NN>-SL<NN> <->
+    GS<NN>), so there is no per-device station corroboration — only a line-level note when BOTH the decant
+    scanners AND the decant stations look unhealthy in the same run.
+  - discrepancy_details (Discrepancy Marked Barcode/Carton) is a frozen (2022) per-serial/carton drill-down
+    with no station key -> no live per-station discrepancy signal exists; the station model is coarse by
+    necessity and honestly low-confidence. If a live station-keyed discrepancy feed appears, add it as the
+    station primary (it would mirror the gtp_station discrepancy model exactly).
+
+# ---- Scoring thresholds (penalty model; see health.py) -----------------------
+thresholds:
+  history_min_runs_for_trend: 5   # >= this many prior snapshots -> 'trend' regime
+  # NOTE: scanner peer-z is a WITHIN-snapshot measurement (this run's misread vs decant peers), so it
+  # applies immediately. Station idle-recurrence + offline-persistence are cross-run counts that are 0 at
+  # cold start by construction, so the station entity is honestly ok/low-confidence until history accrues.
+  tiers: {ok: 85, watch: 65, warn: 40}
+  ttm_bands_hours: {critical: 48, warn: 240, watch: 720}
+  confidence:
+    scanner_coldstart_base: 0.40
+    station_coldstart_base: 0.30   # lower than gtp_station: no live fault feed for decant stations
+    trend_base: 0.72
+
+  scanner:                        # SAME calibration as the (proven) gtp_station scanner model
+    min_volume_full: 200          # scans in the window needed for full misread-penalty weight + full confidence
+    min_volume_peer: 200          # min scans for the peer_z penalty to apply (and to be in the peer baseline)
+    peer_z_min_misread_pct: 1.0   # peer_z also requires misread% >= this, so a clean decant diverter is never flagged
+    recur_min_misread_pct: 2.0    # recurrence counts prior runs whose MISREAD% >= this (misread-specific)
+    penalties:                    # weight · cap (points off 100)
+      misread:    {weight: 3.0, cap: 75}   # per 1% misread (NoRead/(Read+NoRead)); scaled by volume_factor
+      peer_z:     {weight: 4.0, cap: 16}   # robust z of misread% vs the decant scanner fleet (gated)
+      recurrence: {weight: 6.0, cap: 30}   # per prior run this device's MISREAD% was >= recur_min_misread_pct
+
+  station:
+    idle_floor_cartons: 0         # Active station with <= this many decanted cartons in the window = idle
+    line_busy_min_cartons: 50     # the decant line is "busy" (idle-while-active is meaningful) only if total cartons >= this
+    penalties:                    # weight · cap (points off 100)
+      offline_persistence: {weight: 4.0, cap: 20}   # per consecutive prior run Inactive beyond 1 (context downtime; -> WATCH ceiling, may be intentional)
+      idle_recurrence:     {weight: 6.0, cap: 40}   # per consecutive recent run idle-while-active-while-line-busy beyond 1 (sustained -> WARN; a single idle window is normal)

@@ -121,6 +121,11 @@ thresholds:
     trend_base: 0.72
 
   scanner:
+    # Session 8: decant/compaction scan devices (7 *_decant_diverter + 2 Compaction_scanner*) are
+    # now OWNED by Module 8 (decant_station) and EXCLUDED here, so each device is owned by exactly
+    # one module (CLAUDE.md §7). They still surface in GTP Scanner logs #8 (shared panel) but are
+    # dropped from the GTP scanner universe + peer baseline in features.py.
+    exclude_subtypes: [decant, compaction]
     min_volume_full: 200          # scans in the window needed for full misread-penalty weight + full confidence
     min_volume_peer: 200          # min scans for the peer_z penalty to apply (and to be in the peer baseline) — drops noisy low-volume scanners
     peer_z_min_misread_pct: 1.0   # peer_z penalty also requires misread% >= this, so a trivially-above-a-tiny-median scanner is not flagged

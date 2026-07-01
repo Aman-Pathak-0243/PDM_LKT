@@ -93,8 +93,9 @@ class GtpStationModule(PdMModule):
             "active_status is context, not a hard fault (14 of 63 stations were Inactive this snapshot). Only "
             "persistent Inactivity across consecutive runs adds a small penalty; the future true-downtime signal "
             "is GTP Stations #6 (minutes a tote has sat inside a station — a gauge, no CSV yet).",
-            "decant_* / Compaction_* scan devices appear in the GTP scanner feed but belong to the Decanting "
-            "Station (Module 8) / compaction line — scored here and tagged by subtype so Module 8 can reconcile.",
+            "decant_* / Compaction_* scan devices appear in the GTP scanner feed but are OWNED by the Decanting "
+            "Station module (Module 8) as of Session 8 — excluded here (scanner.exclude_subtypes) so each device "
+            "is owned by exactly one module; GTP Scanner logs #8 is a shared panel.",
             "GTP Station Information + Live GTP Summary were dropped (pendency/inventory, not health); GTP "
             "Throughput v2 is a documented future secondary (trend already accrues in our store).",
         ],

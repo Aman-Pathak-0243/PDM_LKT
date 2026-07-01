@@ -137,8 +137,15 @@ def _scanner_features(bundle: FetchBundle, window: str) -> Dict[str, Dict[str, A
                 if pd.notna(v):
                     hits_by[str(k)] = int(v)
 
+    # Session 8: decant/compaction scan devices are owned by Module 8 (decant_station) and are
+    # excluded from the GTP scanner universe + peer baseline (they still surface in the shared #8
+    # panel). Dropping them here also removes them from the peer pool built below.
+    exclude_subtypes = {str(s).lower() for s in thresholds().get("scanner", {}).get("exclude_subtypes", [])}
+
     feats: Dict[str, Dict[str, Any]] = {}
     for name, r in grp.iterrows():
+        if _scanner_subtype(name) in exclude_subtypes:
+            continue
         total = float(r["_total"])
         noread_n = float(r["_noread"])
         misread = (noread_n / total) if total > 0 else 0.0

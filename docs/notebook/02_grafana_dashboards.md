@@ -249,6 +249,13 @@ Scanner ids carry the subtype: pick-station slot scanners `GS<NN>-SL<NN>` (belon
 `aisle_<NN>_*_diverter`, `aisle_<NN>_decant_diverter`. The worst live misreads are station slot
 scanners (`GS030-SL02`=53%, `GS015-SL02`=51%) + a dead diverter (`aisle_03_gtp_diverter`=100%).
 
+> **Session 8 update:** the `decant`/`compaction` subtype devices (7 `aisle_<NN>_decant_diverter`
+> + 2 `Compaction_scanner_<N>`) were reassigned to the **Decanting Station + Scanner module
+> (Module 8)** and are now **excluded** from the GTP scanner universe + peer baseline
+> (`gtp_station/module.yaml → scanner.exclude_subtypes`). The GTP scanner universe is therefore
+> **263** (was 272). GTP Scanner logs `#8` is a **shared** panel (Module 8 filters it to those 9
+> devices). Each device is owned by exactly one module (CLAUDE.md §7).
+
 ### Discrepancy Report Events — `D6sQle2Vz` (folder: GTP) — **PRIMARY (station)** — *reassigned from Conveyor (Session 3)*
 No vars. MSSQL `lenskart_gtp` (`verification_events`).
 
@@ -271,5 +278,49 @@ No vars. MSSQL `lenskart_gtp` (`station`).
 | GTP Station Information | `j-fIgfqnk` | `#2` per-station `remaining_quantity/lines/skus/occupancy` — **PENDENCY/inventory**, not health. The mapping mislabeled it "uptime/downtime". |
 | Live GTP Summary | `j_cdWK_7z` | Station pendency / wave / outbound / current-inventory panels — **operational state**, not health. The mapping mislabeled it "real-time station throughput". |
 | GTP Throughput v2 | `ZR7Z2FR4z` | *(deferred, not dropped)* per-scanner hit-rate `#8` + per-station line-rate `#2` timeseries — a live trend source; our store already accrues per-run trend, so it is a future secondary. |
+
+## Session 8 — DECANTING STATION + SCANNER module
+
+Resolved + sampled 2026-07-01. This module scores **two component types** — decant/compaction
+**scanners** (9, `decant_scanner`) and decant operator **stations** (10, `decant_station`,
+`DS001`–`DS010`). The two signals are **very unevenly supported**: the scanner misread rate is a
+strong live signal; the station has **no live fault/discrepancy feed** at all. Three mapping
+candidates turned out to be frozen drill-downs / var-gated (dropped); the real live sources were
+confirmed by re-verifying every candidate.
+
+### GTP Scanner logs — `pK7-8NmVz` (folder: GTP) — **PRIMARY (scanner)** — *shared with Module 7*
+No template vars. MSSQL `lenskart_gtp` (`scanner_events`). The **same** `#8` panel the GTP module
+uses; this module **filters it to the 9 decant/compaction devices** it owns (name contains `decant`
+/ `compaction`). See Session 7 for the full panel table.
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Scanner Read /No read Data | 8 | table | `scanner, ReadCount, NoReadCount, efficiency_percentage` (windowed) | **PRIMARY signal.** Per-device misread = `NoRead/(Read+NoRead)`, filtered to `decant`/`compaction`. 7 decant diverters 0.008–0.167% (ok); 2 compaction scanners ~4% (watch). |
+
+### Decanting station report — `B4i1-HpVz` (folder: Decanting) — **PRIMARY (station roster)**
+No template vars. MSSQL `lenskart_decanting` (`station`).
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Decanting Station Report | 2 | table | `select station_id, active_status(1=Active/0=Inactive), user_id from station` | **PRIMARY roster.** The **10-station universe** (`DS001`–`DS010`) + Active/Inactive (9/1 this snapshot) + assigned user. Current snapshot (not window-filtered). |
+| Material Type Available | 4 | barchart | `hsn_classification, sum(qty)` from `partition_details` | Partition **inventory** by material class — not a health signal. |
+
+### StationWise Decanted Cartons Count — `n1oZnY_Vz` (folder: Decanting) — **SECONDARY (station throughput)**
+No template vars. MSSQL `lenskart_decanting`.
+
+| Panel | id | type | Fields / query | Verdict |
+|-------|----|------|----------------|---------|
+| Station-Wise-Decanted-Cartons | 2 | barchart | `station_id, COUNT(carton_id)` from `grn_pick_list × hu_carton_mapping` (`status=2`, `updated_date` in window) | **SECONDARY.** Per-station decanted-carton **throughput** over the window (**time-filtered**). Used for the idle-while-active anomaly + utilization; low throughput alone is not penalized. This snapshot: 7 stations busy (`DS003`=749 … `DS010`=116). |
+
+### Dropped as decant-health sources (verified Session 8 by live SQL/sampling)
+| Dashboard | uid | Actual content |
+|-----------|-----|----------------|
+| Discrepancy Marked Barcode | `E_nYUnU4z` | `#2` = drill-down `SELECT … FROM discrepancy_details WHERE serial_id = '${Serial_No}'` (one barcode). **No station column**; **frozen 2022** (`create_timestamp 2022-12-21`). The mapping mislabeled it "barcode scan-failure rate". No live per-station discrepancy signal. |
+| Discrepancy Marked Carton | `LQMn4RU4k` | `#2` = the same `discrepancy_details` drill-down `WHERE carton_id = '${Carton_Id}'`. Same finding. Dropped. |
+| Station-Material Wise Decants | `3TbhR4TSz` | `#2` per-station `carton_count` **filtered by `${hsn_classification}`** — a per-material load profile; no population without the var. Not fetched. |
+
+**Reconciliation (Session 8):** the 9 decant/compaction scan devices were scored by the GTP module
+(Module 7) until this session; GTP now excludes subtypes `decant`/`compaction`, so each device is
+owned by exactly one module (CLAUDE.md §7). GTP Scanner logs `#8` is a shared panel.
 
 *(Subsequent sessions append their module's dashboard sections here.)*

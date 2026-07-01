@@ -221,4 +221,37 @@ the `(module, component_id, created_at)` index keeping trend/RUL queries fast un
 For very frequent automation, GTP is the first module worth a tighter interval or a scanner-tier
 filter (e.g. persist only non-ok scanners) if the store grows faster than desired.
 
+## Fetch volume — DECANTING STATION + SCANNER sources (sampled 2026-07-01)
+
+| Dashboard / panel | Rows fetched | Notes |
+|-------------------|-------------:|-------|
+| GTP Scanner logs `#8` (Read/NoRead) | **272** | The full scanner table (**shared** with GTP); filtered in-code to the **9** decant/compaction devices. **Windowed**. |
+| Decanting station report `#2` | **10** | The `DS001`–`DS010` roster + Active/Inactive; current snapshot (not window-filtered). |
+| StationWise Decanted Cartons Count `#2` | **~7** | Per-station carton throughput (only stations that decanted appear); **windowed** → scales with the window/load. |
+
+A full decant fetch pulls ≈ **289 rows in ~13–14 s** (three light table panels; the scanner table is
+the largest, and it is the same fetch the GTP module already makes). The two frozen "Discrepancy
+Marked" drill-downs and the var-gated material-wise panel are **not** fetched.
+
+## Write footprint — per PdM run (DECANTING STATION + SCANNER)
+
+`component_health` rows/run = **9 scanners + 10 stations = 19** — a small writer (both populations are
+tiny). Each row ≈ 1–1.5 KB (rca_json carries the misread detail / status / cross-run stats). Plus 1
+`pdm_run`, 1 `trigger_log`, ~3 `panel_catalog` upserts, ~1–2 `event_log`.
+
+| Automation interval | component_health rows/day (decant, 19) | growth/day | per year |
+|---------------------|-----------:|-----------:|---------:|
+| hourly | 19 × 24 = 456 | ~0.7 MB | ~0.25 GB |
+| every 15 min | 1,824 | ~2.7 MB | ~1 GB |
+
+Decant is a small module by volume, but its **store** is what makes the station entity work at all:
+with no live discrepancy feed, a decant station's only signal is **persistence** across runs (offline
+or idle-while-active), so **regular automation is what makes it predictive** — a single run scores
+every station `ok`. Across all eight modules a single "Run all" writes ≈ **16 + 124 + 6 + ~54 + 52 +
+~40 + ~326 + 19 ≈ 637** `component_health` rows (GTP is now ~326 = 263 scanners + 63 stations after
+the 9 decant/compaction devices moved to Module 8; decant adds them back as 9 scanners plus 10 new
+stations); hourly automation ≈ 15,000 rows/day — still within the CSV store, with the Storage page's
+archive/delete-by-range to cap footprint and the `(module, component_id, created_at)` index keeping
+trend/RUL queries fast under MySQL later.
+
 *(Subsequent sessions append their module's fetch volumes + write footprint here.)*

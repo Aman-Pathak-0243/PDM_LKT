@@ -283,3 +283,85 @@ def test_methodology_doc_present_for_modules():
         assert md["overall_status"]["rules"]          # shared rollup doc present
         if m.name in ("lift", "shuttle", "conveyor", "tracker"):
             assert md["entity_verdict"] and md["signals"]  # module-specific content
+
+
+# --------------------------- decant model (Module 8) --------------------- #
+def _decant_scanner_frame():
+    """The 9 decant/compaction devices + one GTP pick scanner (must be excluded here / kept in GTP)."""
+    rows = [
+        ("aisle_01_decant_diverter", 15757, 26), ("aisle_01_decant_diverter_2", 16173, 27),
+        ("aisle_02_decant_diverter", 21417, 6), ("aisle_03_decant_diverter", 16874, 2),
+        ("aisle_04_decant_diverter", 12168, 1), ("aisle_05_decant_diverter", 8128, 6),
+        ("aisle_06_decant_diverter", 4255, 5),
+        ("Compaction_scanner", 478, 20), ("Compaction_scanner_2", 37006, 1492),
+        ("GS001-SL01", 1000, 3),
+    ]
+    return pd.DataFrame([{"scanner": s, "ReadCount": r, "NoReadCount": n} for s, r, n in rows])
+
+
+def _decant_bundle():
+    scan = _decant_scanner_frame()
+    stations = pd.DataFrame(
+        [{"Station ID": f"DS{n:03d}", "active_status": ("Inactive" if n == 9 else "Active"),
+          "User": f"DS{n:03d}"} for n in range(1, 11)])
+    cartons = pd.DataFrame([{"station_id": s, "carton_count": c} for s, c in
+                            [("DS003", 749), ("DS005", 413), ("DS006", 334), ("DS007", 231),
+                             ("DS004", 149), ("DS008", 141), ("DS010", 116)]])  # DS001/DS002 active-idle
+    return FetchBundle(frames={"misread": scan, "stations": stations, "cartons": cartons},
+                       rows_fetched=len(scan) + 17, panels=[], notes={"window": "now-2d"})
+
+
+def test_decant_ownership_and_dual_entity_scoring():
+    from modules.decant_station.features import compute_features as dcf
+    from modules.decant_station.health import score as dsc
+    from modules.gtp_station.features import compute_features as gcf
+
+    feats = dcf(_decant_bundle())
+    scanners = {k for k, v in feats.items() if v["component_type"] == "decant_scanner"}
+    stations = {k for k, v in feats.items() if v["component_type"] == "decant_station"}
+    assert len(scanners) == 9 and len(stations) == 10
+    assert "GS001-SL01" not in feats            # pick scanner is NOT owned by decant
+
+    # GTP must EXCLUDE the same decant/compaction devices (each device owned by exactly one module).
+    gfeats = gcf(FetchBundle(frames={"misread": _decant_scanner_frame()}, notes={"window": "now-2d"}))
+    assert "GS001-SL01" in gfeats
+    assert not ({s for s in gfeats} & scanners)  # no overlap between GTP + decant scanner universes
+
+    comps = {c.component_id: c for c in dsc(feats, _NoHistory())}
+    # clean decant diverters -> ok; elevated compaction scanners -> watch (misread + peer_z, capped)
+    assert comps["aisle_04_decant_diverter"].risk_tier == "ok"
+    assert comps["Compaction_scanner"].risk_tier == "watch"
+    assert comps["Compaction_scanner_2"].risk_tier == "watch"
+    # stations honest at cold-start (no live fault feed): all ok, low confidence
+    assert all(comps[f"DS{n:03d}"].risk_tier == "ok" for n in range(1, 11))
+    assert comps["DS001"].confidence < 0.75
+    # idle-while-active is surfaced in the RCA even when not yet penalised
+    assert comps["DS001"].metrics["idle_while_active"] is True
+    assert comps["Compaction_scanner"].component_type == "decant_scanner"
+
+
+def test_decant_station_persistence_escalates():
+    """Store-driven: sustained idle-while-active -> warn; sustained Inactive -> watch ceiling."""
+    from modules.decant_station.features import compute_features as dcf
+    from modules.decant_station.health import score as dsc
+
+    class _Hist:
+        def __init__(self, per):
+            self.per = per
+
+        def component_history(self, module, cid, limit=400):
+            return self.per.get(cid, [])
+
+        def run_count(self, module):
+            return 10
+
+    feats = dcf(_decant_bundle())
+    idle_hist = [{"created_at": now_iso(), "health_score": 90.0,
+                  "metrics_json": {"idle_while_active": True}} for _ in range(8)]
+    inact_hist = [{"created_at": now_iso(), "health_score": 90.0,
+                   "metrics_json": {"is_active": False}} for _ in range(8)]
+    comps = {c.component_id: c for c in dsc(feats, _Hist({"DS001": idle_hist, "DS009": inact_hist}))}
+    assert comps["DS001"].risk_tier == "warn"          # sustained idle-while-active
+    assert comps["DS001"].metrics["consecutive_idle_active"] == 9
+    assert comps["DS009"].risk_tier == "watch"         # sustained Inactive is capped at the watch ceiling
+    assert comps["DS009"].health_score >= 65

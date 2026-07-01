@@ -176,19 +176,39 @@ its slot scanner. Implemented in `modules/gtp_station/`.
 
 ---
 
-## 8. Decanting Station + Scanner PdM
-**Sub-component:** Decant stations + scanners
+## 8. Decanting Station + Scanner PdM  ✅ BUILT (Session 8) — RESOLVED BY LIVE INSPECTION
+**Sub-components:** decant/compaction-line **scanners** (9, `decant_scanner`) **and** decant
+operator **stations** (10, `decant_station` — `DS001`–`DS010`). Second module (after `gtp_station`)
+scoring **two component types** in one plugin.
 
-| Role | Dashboard | Folder | What it provides |
-|------|-----------|--------|------------------|
-| Primary | Decanting station report | Decanting | Per-station activity & faults |
-| Primary | Discrepancy Marked Barcode | Decanting | Barcode scan-failure rate |
-| Primary | Discrepancy Marked Carton | Decanting | Carton-level scan discrepancies |
-| Secondary | StationWise Decanted Cartons Count | Decanting | Throughput baseline per station |
-| Secondary | Station-Material Wise Decants | Decanting | Station load profile |
+| Role | Dashboard | Folder | What it provides | Verified |
+|------|-----------|--------|------------------|----------|
+| Primary (scanner) | GTP Scanner logs (`pK7-8NmVz`) | GTP | `#8` Read/NoRead **filtered to the 9 decant/compaction devices** (7 `aisle_0N_decant_diverter` + 2 `Compaction_scanner*`) → per-device **misread rate**. **Shared** panel with Module 7. | ✅ 9 devices, windowed |
+| Primary (station roster) | Decanting station report (`B4i1-HpVz`) | Decanting | `#2` `station_id, active_status(Active/Inactive), user_id` → the **10-station roster** + status | ✅ 10 stations (9/1) |
+| Secondary (throughput) | StationWise Decanted Cartons Count (`n1oZnY_Vz`) | Decanting | `#2` `station_id, carton_count` (windowed) → per-station decant **throughput** (idle-while-active + utilization) | ✅ 7 busy/2d |
 
-**Signal type:** Per-station scan-failure / discrepancy climb → scanner or station degradation.
-**Build priority:** 8.
+**Signal type:** scanner **misread rate** (volume-gated + peer/recurrence/trend) — the strong live
+signal; station **status + throughput** only — **no live per-station fault/discrepancy feed exists**,
+so a station is scored coarsely on active-status/offline-persistence + a persistent idle-while-active
+anomaly (store-driven), at low confidence. There is **no 1:1 scanner↔station device mapping** (aisle
+diverters vs operator stations), so only line-level corroboration. Implemented in `modules/decant_station/`.
+
+> **CORRECTION 1 (Session 8):** the mapping listed **Discrepancy Marked Barcode** (`E_nYUnU4z`) and
+> **Discrepancy Marked Carton** (`LQMn4RU4k`) as "barcode/carton scan-failure rate". Live SQL shows
+> both are **drill-down lookups** into `discrepancy_details` filtered by `${Serial_No}` / `${Carton_Id}`
+> (one barcode/carton at a time), with **no station column** (keyed carton/serial/tote) and data
+> **frozen at 2022**. They **cannot** yield a live per-station discrepancy rate. **Both dropped as
+> health sources.** **Decanting station report** is the station **roster** (not "activity & faults"),
+> and **Station-Material Wise Decants** (`3TbhR4TSz`) needs a `${hsn_classification}` var (load profile,
+> not fetched). The real live signal is the **scanner misread rate** + station roster/status/throughput.
+>
+> **CORRECTION 2 / RECONCILIATION (Session 8):** the 9 decant/compaction scan devices were scored by
+> the **GTP module (Module 7)** (tagged subtype `decant`/`compaction`). They are now **owned here** and
+> **excluded from GTP** (`gtp_station/module.yaml → scanner.exclude_subtypes`; features.py drops them
+> from the universe + peer baseline; GTP scanner universe 272 → **263**), so **each device is owned by
+> exactly one module** (CLAUDE.md §7). **GTP Scanner logs (`pK7-8NmVz`) #8 is a SHARED panel.**
+
+**Build priority:** 8 — anomaly detection, quick win. **Built.**
 
 ---
 

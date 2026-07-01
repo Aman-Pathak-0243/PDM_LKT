@@ -29,8 +29,8 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 | 5 | Gate / Door-Actuator | [modules/gate/README.md](modules/gate/README.md) | ✅ built (Session 5) — per-gate open/close state + response latency + stuck persistence (live) |
 | 6 | Bin / Tote-Mechanical | [modules/bin_mech/README.md](modules/bin_mech/README.md) | ✅ built (Session 6) — per-slot bin-block/tilt: block-age + historical + cross-run recurrence (live) |
 | 7 | GTP Station + Scanner | [modules/gtp_station/README.md](modules/gtp_station/README.md) | ✅ built (Session 7) — dual-entity: 272 scanners (misread rate) + 63 stations (discrepancy rate), live data |
-| 8 | Decanting Station + Scanner | _next session_ | ⏳ planned (Decanting station report, Discrepancy Marked Barcode/Carton; reconcile GTP `decant_*` scanners) |
-| 9 | Network / Comms | — | planned (cross-feature for Lift/Shuttle) |
+| 8 | Decanting Station + Scanner | [modules/decant_station/README.md](modules/decant_station/README.md) | ✅ built (Session 8) — dual-entity: 9 decant/compaction scanners (misread rate) + 10 stations (status/throughput, no live discrepancy feed); reconciled 9 devices from GTP (each device owned by one module), live data |
+| 9 | Network / Comms | _next session_ | ⏳ planned (Quadron Network status — latency/packet-loss; cross-feature for Lift/Shuttle) |
 | 10 | Controller / Compute | — | planned |
 | 11 | System-Wide Anomaly (meta) | — | planned (last) |
 

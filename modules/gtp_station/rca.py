@@ -48,13 +48,10 @@ def build_scanner_rca(feat: Dict[str, Any], penalties: Dict[str, float], recurre
     subtype = feat.get("subtype")
     parent = feat.get("parent_station")
 
+    # Session 8: decant/compaction scan devices are excluded from GTP scoring in features.py
+    # (owned by Module 8, decant_station), so subtype is never decant/compaction here — no
+    # cross-module flag is needed; each device is owned by exactly one module (CLAUDE.md §7).
     cross: List[Dict[str, str]] = []
-    if subtype == "decant":
-        cross.append({"module": "decant_station",
-                      "reason": "decant-line scan device (Module 8, Decanting Station + Scanner) surfacing in the GTP scanner feed"})
-    elif subtype == "compaction":
-        cross.append({"module": "compaction",
-                      "reason": "compaction-line scan device surfacing in the GTP scanner feed"})
     if parent:
         cross.append({"module": "gtp_station",
                       "reason": f"slot scanner for pick station {parent} — cross-check that station's discrepancy rate"})
