@@ -46,6 +46,7 @@ Full guides live under [`docs/`](docs/) (and are compiled into a single Word not
 | [PdM Methodology](docs/notebook/methodology.md) | The shared scoring philosophy (+ §12 audit invariants) |
 | [Audit & Hardening Report](docs/AUDIT_REPORT.md) | The Session-12 correctness/methodology/RCA audit + fixes |
 | **[ASRS_PdM_Notebook.docx](docs/ASRS_PdM_Notebook.docx)** | The compiled Word notebook (rebuild: `python scripts/build_notebook.py`) |
+| **[ASRS_PdM_Executive_Summary.docx](docs/ASRS_PdM_Executive_Summary.docx)** | Weekly stakeholder progress report — charts/diagrams from live data (rebuild: `python scripts/build_exec_summary.py`) |
 
 ---
 
@@ -232,6 +233,9 @@ automatically. Follow the per-module SOP in `CLAUDE.md §5`.
 - `scripts/build_analytics_dataset.py` — build tidy trend/EDA/ML CSV extracts from the
   store into `database/analytics/` (universal time-series + per-module feature matrices +
   data dictionary). Read-only; safe to re-run.
+- `scripts/build_exec_summary.py` — build the weekly Executive Summary (`docs/ASRS_PdM_Executive_Summary.docx`):
+  renders charts + architecture/workflow diagrams from the live analytics data and lays out a
+  ~5-page stakeholder report. Re-run each week after refreshing the analytics.
 - `scripts/discover_dashboards.py` — log in + list/match dashboards via `/api/search`.
 - `scripts/inspect_<module>.py` — enumerate (`meta`) + sample (`sample`) panels
   (`inspect_lift.py`, `inspect_shuttle.py`, `inspect_tracker.py`, `inspect_gate.py`,

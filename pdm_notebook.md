@@ -52,3 +52,4 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 - [Analytics dataset builder](scripts/build_analytics_dataset.py) — flatten the store into tidy trend/EDA/ML CSVs under `database/analytics/` (universal time-series + per-module feature matrices + data dictionary).
 - [Migration/export script](scripts/db_migrate_export.py) — backup / copy / load / verify the store (CSV↔MySQL).
 - **[ASRS_PdM_Notebook.docx](docs/ASRS_PdM_Notebook.docx)** — the compiled Word notebook (all of the above + module chapters), rebuilt via [`scripts/build_notebook.py`](scripts/build_notebook.py).
+- **[ASRS_PdM_Executive_Summary.docx](docs/ASRS_PdM_Executive_Summary.docx)** — weekly stakeholder progress report (executive summary with live charts + architecture/workflow diagrams), rebuilt via [`scripts/build_exec_summary.py`](scripts/build_exec_summary.py).

@@ -22,6 +22,9 @@ data/
 logs/
 *.log
 
+# Generated report intermediates (the .docx deliverables are tracked; figures are rebuilt)
+docs/_exec_figs/
+
 # Playwright
 .cache/
 playwright-report/
