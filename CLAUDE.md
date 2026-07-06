@@ -94,7 +94,8 @@ webapp/                FastAPI app: main dashboard + per-module pages + APIs
 db/schema.sql          MySQL schema (designed; applied only once permitted)
 docs/                  the PdM book (notebook chapters + mapping)
 database/              CSV data store (gitignored): store/ (live tables) + analytics/
-                       (tidy trend/EDA/ML extracts) + archive/ + exports/; see database/README.md
+                       (tidy trend/EDA/ML extracts) + raw/ (per-run gzipped raw fetched
+                       panel data, RAW_CAPTURE) + archive/ + exports/; see database/README.md
 logs/                  structured logs (gitignored)
 ```
 

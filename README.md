@@ -101,7 +101,8 @@ Then browse to `http://<host-ip>:8800`. Healthcheck: `GET /api/health`.
 The active store is **CSV** under **`database/store/`** — one file per table, mirroring the
 MySQL schema. All plant data lives in the single **`database/`** folder (`DATA_DIR=database`),
 which also holds `analytics/` (tidy, analysis-ready extracts for trends/EDA/ML — see
-[`database/README.md`](database/README.md)), `archive/`, and `exports/`. **MySQL is
+[`database/README.md`](database/README.md)), `raw/` (per-run gzipped snapshots of the raw
+fetched Grafana data — toggle with `RAW_CAPTURE`), `archive/`, and `exports/`. **MySQL is
 intentionally not used until permission is granted.** The schema is designed in
 `db/schema.sql` and a dormant MySQL backend exists; switching is `STORAGE_BACKEND=mysql`
 + `MYSQL_CONFIRM=ENABLE` (and the real DB name) — no application-logic changes.

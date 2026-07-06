@@ -109,6 +109,7 @@ class Config:
     data_dir: Path
     log_dir: Path
     fetch_default_window: str
+    raw_capture: bool             # snapshot raw fetched panel data per run (database/raw/)
     raw: Dict[str, str] = field(default_factory=dict, repr=False)
 
     # ---- module dashboard URL helpers --------------------------------------
@@ -198,5 +199,6 @@ def get_config() -> Config:
         data_dir=_resolve_dir(env, "DATA_DIR", "database"),
         log_dir=_resolve_dir(env, "LOG_DIR", "logs"),
         fetch_default_window=env.get("FETCH_DEFAULT_WINDOW", "now-2d"),
+        raw_capture=_as_bool(env.get("RAW_CAPTURE", "true")),
         raw=env,
     )

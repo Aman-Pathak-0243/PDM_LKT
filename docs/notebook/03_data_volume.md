@@ -12,8 +12,16 @@ sampling only, not persisted PdM data). The PdM write footprint is derived from 
 
 All **persisted** PdM data is **CSV-only**, under the single **`database/`** folder (`DATA_DIR=database`):
 `store/` (live tables), `analytics/` (tidy trend/EDA/ML extracts built by
-`scripts/build_analytics_dataset.py`), `archive/`, and `exports/`. Data dictionary:
+`scripts/build_analytics_dataset.py`), `raw/` (per-run gzipped snapshots of the raw fetched
+panel data when `RAW_CAPTURE=true`), `archive/`, and `exports/`. Data dictionary:
 [`database/README.md`](../../database/README.md).
+
+**Raw capture footprint.** `store/component_health` is tiny (~18 rows/run). `raw/` is the
+opposite: it keeps *every fetched row*, so a single run can persist thousands of rows (e.g.
+Lift's error panel ≈ 4.8k rows). Gzip compresses it heavily (text/CSV → ~10–20% of raw), but
+it still dwarfs the derived store. Keep `RAW_CAPTURE=true` for a full audit trail / raw-signal
+EDA, and prune or archive old `raw/<run_uid>/` folders (oldest-first) to bound growth; set
+`RAW_CAPTURE=false` to store derived features + verdicts only.
 
 ## Fetch volume — LIFT sources (sampled 2026-06-30)
 

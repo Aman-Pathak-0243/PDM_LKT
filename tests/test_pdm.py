@@ -834,3 +834,48 @@ def test_overview_ttm_boundary_imminent_consistent(tmp_path, monkeypatch):
     bucket = {b["label"]: b["count"] for b in a["ttm_buckets"]}
     assert a["kpis"]["imminent"] == 1
     assert bucket["≤24h"] == 1 and bucket["1–3d"] == 0  # 24.0 in ≤24h, not 1–3d
+
+
+# --------------------------- raw fetched-data capture --------------------- #
+class _Cfg:
+    def __init__(self, data_dir, raw_capture=True):
+        self.data_dir = data_dir
+        self.raw_capture = raw_capture
+
+
+def test_raw_capture_writes_gzipped_panels_and_manifest(tmp_path):
+    """Each fetched panel frame is snapshotted to database/raw/<run_uid>/*.csv.gz
+    with a manifest; toggling RAW_CAPTURE off writes nothing; failures never raise."""
+    import json
+    from core.registry import FetchBundle
+    from core.runner import _persist_raw
+
+    bundle = FetchBundle(
+        frames={"errors": pd.DataFrame([{"a": 1, "b": 2}, {"a": 3, "b": 4}]),
+                "empty": pd.DataFrame()},
+        rows_fetched=2,
+    )
+    _persist_raw(_Cfg(tmp_path), "lift", "RUID1", "now-2d", bundle)
+    run_dir = tmp_path / "raw" / "RUID1"
+    man = json.loads((run_dir / "manifest.json").read_text())
+    assert man["module"] == "lift" and man["run_uid"] == "RUID1" and man["window"] == "now-2d"
+    errors = next(f for f in man["frames"] if f["name"] == "errors")
+    assert errors["rows"] == 2 and errors["file"] == "lift__errors.csv.gz"
+    back = pd.read_csv(run_dir / "lift__errors.csv.gz")  # pandas auto-decompresses .gz
+    assert list(back.columns) == ["a", "b"] and len(back) == 2
+
+    # RAW_CAPTURE off -> nothing written
+    off = tmp_path / "off"
+    _persist_raw(_Cfg(off, raw_capture=False), "lift", "R2", "now-2d", bundle)
+    assert not (off / "raw").exists()
+
+    # A bad frame must not raise (best-effort); good frames still land
+    class _Bad:
+        shape = (1, 1)
+        columns = ["x"]
+        def to_csv(self, *a, **k):
+            raise RuntimeError("boom")
+    _persist_raw(_Cfg(tmp_path), "gate", "RUID3", "now-2d",
+                 FetchBundle(frames={"bad": _Bad(), "ok": pd.DataFrame([{"v": 1}])}, rows_fetched=1))
+    man3 = json.loads((tmp_path / "raw" / "RUID3" / "manifest.json").read_text())
+    assert [f["name"] for f in man3["frames"]] == ["ok"]  # bad frame skipped, ok kept

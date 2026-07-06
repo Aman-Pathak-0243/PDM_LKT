@@ -32,6 +32,10 @@ database/
     runs.csv                          run-level table (join on run_uid)
     data_dictionary.csv               column → dtype + description
     manifest.json                     what was built, row counts, generated-at
+  raw/          raw fetched Grafana data, snapshotted per run (RAW_CAPTURE=true)
+    <run_uid>/  one folder per module-run
+      <module>__<panel>.csv.gz        the exact rows fetched from each panel (gzipped)
+      manifest.json                   module, window, per-panel rows/columns/bytes
   archive/      rows moved out of the active store by the Storage "archive" action
   exports/      one-off exports produced by the Storage page / migration script
 ```
@@ -90,7 +94,31 @@ scored. Join to the time-series on `run_uid` for run-level context.
 
 ---
 
-## 4. Quick starts
+## 4. Raw fetched data (`raw/`)
+
+`store/` and `analytics/` hold **derived** signals — the per-component features and health
+verdicts a run *computes*. `raw/` holds the **input** to that computation: the exact rows
+each run fetched from Grafana, before any feature derivation.
+
+- On every PdM run, each fetched panel is written to
+  `raw/<run_uid>/<module>__<panel>.csv.gz` (gzipped CSV) with a `manifest.json`
+  (module, window, per-panel rows/columns/bytes). `run_uid` joins back to `store/pdm_run.csv`.
+- Controlled by **`RAW_CAPTURE`** in `.env` (default `true`). Best-effort: a raw-capture
+  failure is logged and never fails the run.
+- **Why:** full audit trail, and the ability to re-derive features or run EDA/ML directly on
+  the raw signals later. Grafana retains raw data only ~2 days; this keeps it.
+- **Volume:** raw is far larger than derived (a single panel can be thousands of rows/run vs
+  ~18 derived rows). Gzip keeps it compact; for long retention, periodically prune or archive
+  old `raw/<run_uid>/` folders (oldest first). Set `RAW_CAPTURE=false` to disable entirely.
+
+```python
+import pandas as pd
+raw = pd.read_csv("database/raw/<run_uid>/lift__errors.csv.gz")  # pandas auto-decompresses .gz
+```
+
+---
+
+## 5. Quick starts
 
 ```python
 import pandas as pd

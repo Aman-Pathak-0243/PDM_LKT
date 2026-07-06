@@ -12,6 +12,8 @@ executor or the webapp thread pool), never the asyncio event loop.
 from __future__ import annotations
 
 import datetime as _dt
+import json
+import re
 from time import perf_counter
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -78,6 +80,53 @@ def _persist_panels(storage: StorageBackend, module: str, panels: Sequence[Dict[
 
 
 # --------------------------------------------------------------------------- #
+# Raw fetched-data snapshot (audit trail / EDA on raw signals)
+# --------------------------------------------------------------------------- #
+def _persist_raw(cfg, module_name: str, run_uid: str, window: str, bundle) -> None:
+    """Snapshot each fetched panel DataFrame to ``database/raw/<run_uid>/`` as a
+    gzipped CSV, plus a manifest. This is the *raw input* to a run (before feature
+    derivation) — Grafana is otherwise the only system-of-record for it.
+
+    Best-effort and fully isolated: any failure here is logged and swallowed so raw
+    capture can never fail the PdM run. Controlled by ``RAW_CAPTURE`` (default on).
+    """
+    if not getattr(cfg, "raw_capture", True):
+        return
+    frames = getattr(bundle, "frames", None) or {}
+    if not frames:
+        return
+    try:
+        run_dir = cfg.data_dir / "raw" / run_uid
+        run_dir.mkdir(parents=True, exist_ok=True)
+        manifest: Dict[str, Any] = {
+            "run_uid": run_uid, "module": module_name, "window": window,
+            "created_at": now_iso(), "frames": [],
+        }
+        for name, df in frames.items():
+            safe = re.sub(r"[^0-9A-Za-z._-]+", "_", str(name)) or "frame"
+            fname = f"{module_name}__{safe}.csv.gz"
+            path = run_dir / fname
+            try:
+                rows = int(df.shape[0]) if hasattr(df, "shape") else 0
+                cols = list(df.columns) if hasattr(df, "columns") else []
+                df.to_csv(path, index=False, compression="gzip")
+            except Exception:  # noqa: BLE001 - one bad frame must not lose the rest
+                log.exception("raw frame write failed",
+                              extra={"module": module_name, "run_uid": run_uid, "frame": str(name)})
+                continue
+            manifest["frames"].append(
+                {"name": str(name), "rows": rows, "columns": cols,
+                 "file": fname, "bytes": path.stat().st_size}
+            )
+        (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        log.info("raw snapshot written",
+                 extra={"module": module_name, "run_uid": run_uid,
+                        "frames": len(manifest["frames"])})
+    except Exception:  # noqa: BLE001 - never break the run on raw capture
+        log.exception("raw capture failed", extra={"module": module_name, "run_uid": run_uid})
+
+
+# --------------------------------------------------------------------------- #
 # Single-module execution (no trigger management)
 # --------------------------------------------------------------------------- #
 def _execute_module(
@@ -108,6 +157,7 @@ def _execute_module(
         bundle = module.fetch(session, eff_window)
         rows_fetched = bundle.rows_fetched
         _persist_panels(storage, module.name, bundle.panels)
+        _persist_raw(cfg, module.name, run_uid, eff_window, bundle)  # raw input snapshot
         features = module.compute_features(bundle)
         history = StorageHistoryReader(storage)
         components = [c.clamp() for c in module.score(features, history)]
