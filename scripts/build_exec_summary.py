@@ -273,40 +273,76 @@ def bullet(doc, label, text, size=11):
     return p
 
 
+def _shaded_para(doc, fill, before=9, after=2, keep=True):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(before); p.paragraph_format.space_after = Pt(after)
+    p.paragraph_format.keep_with_next = keep
+    pPr = p._p.get_or_add_pPr()
+    shd = OxmlElement("w:shd"); shd.set(qn("w:val"), "clear"); shd.set(qn("w:fill"), fill.lstrip("#"))
+    pPr.append(shd)
+    return p
+
+
 def module_block(doc, idx, title, ctype, count, md):
-    """One compact per-module card: name, what it does, signals (features), formulas."""
-    p = doc.add_paragraph(); p.paragraph_format.space_before = Pt(6); p.paragraph_format.space_after = Pt(1)
-    p.paragraph_format.keep_with_next = True
-    run(p, f"{idx}.  {title}", size=10.5, bold=True, color=NAVY)
-    run(p, f"      {ctype} · {count} units", size=8.6, color=MUTED)
+    """Detailed per-module card: header band · summary · signals table · formulas · verdict."""
+    CW = 6.77
+    # --- header band ---
+    hp = _shaded_para(doc, "#1f2f4d", before=11, after=3)
+    run(hp, f"  {idx}.  {title}", size=11, bold=True, color="#ffffff")
+    run(hp, f"       {ctype} · {count} units", size=8.8, color="#b9c8e6")
+    # --- summary (first two sentences) ---
     summ = (md.get("summary") or md.get("description") or "").strip()
-    summ = summ.split(". ")[0].strip().rstrip(".")
-    if len(summ) > 195:
-        summ = summ[:193].rstrip() + "…"
-    sp = doc.add_paragraph(); sp.paragraph_format.space_after = Pt(1.5); sp.paragraph_format.line_spacing = 1.12
-    sp.paragraph_format.keep_with_next = True
-    run(sp, summ + ".", size=9.6)
+    parts = [s for s in summ.split(". ") if s.strip()]
+    summ = ". ".join(parts[:2]).strip().rstrip(".")
+    if len(summ) > 330:
+        summ = summ[:327].rstrip() + "…"
+    if summ:
+        sp = doc.add_paragraph(); sp.paragraph_format.space_after = Pt(3); sp.paragraph_format.line_spacing = 1.13
+        sp.paragraph_format.keep_with_next = True
+        run(sp, summ + ".", size=9.8)
+    # --- signals (features) table ---
     sigs = md.get("signals") or []
     if sigs:
-        gp = doc.add_paragraph(); gp.paragraph_format.space_after = Pt(1.5); gp.paragraph_format.line_spacing = 1.14
-        run(gp, "Signals (features):  ", size=9.3, bold=True, color=ACCENT)
-        for i, s in enumerate(sigs):
-            what = (s.get("what") or "").split(".")[0].strip()
-            if len(what) > 46:
-                what = what[:44].rstrip() + "…"
-            run(gp, s.get("name", ""), size=9.3, bold=True, color=INK)
-            run(gp, f" — {what}", size=9.3, color=MUTED)
-            if i < len(sigs) - 1:
-                run(gp, "   ·   ", size=9.3, color="#9fb0c4")
+        lbl = doc.add_paragraph(); lbl.paragraph_format.space_after = Pt(1.5); lbl.paragraph_format.keep_with_next = True
+        run(lbl, "Signals (features)", size=9.2, bold=True, color=ACCENT)
+        t = doc.add_table(rows=1, cols=3); t.alignment = WD_TABLE_ALIGNMENT.CENTER; t.autofit = False
+        set_table_borders(t, BORDER, 3)
+        w = [1.45, 3.55, CW - 5.0]
+        for i, htext in enumerate(["Signal", "What it tells us", "Source"]):
+            c = t.rows[0].cells[i]; c.width = Inches(w[i]); set_cell_bg(c, PANEL); _no_wrap_pad(c, 18, 18, 70, 70)
+            pp = cell_para(c); pp.paragraph_format.space_after = Pt(0)
+            run(pp, htext, size=8.3, bold=True, color=NAVY)
+        for j, s in enumerate(sigs):
+            cells = t.add_row().cells
+            for i, v in enumerate([s.get("name", ""), s.get("what", ""), s.get("source", "")]):
+                cells[i].width = Inches(w[i]); _no_wrap_pad(cells[i], 14, 14, 70, 70)
+                if j % 2 == 0:
+                    set_cell_bg(cells[i], ROWALT)
+                pp = cell_para(cells[i]); pp.paragraph_format.space_after = Pt(0); pp.paragraph_format.line_spacing = 1.05
+                run(pp, v, size=8.1, bold=(i == 0),
+                    color=NAVY if i == 0 else (MUTED if i == 2 else INK))
+    # --- formulas box (module-specific; shared health formula noted once in the intro) ---
     fs = [f for f in (md.get("formulas") or [])
           if not str(f.get("name", "")).strip().lower().startswith("health")]
     if fs:
-        fp = doc.add_paragraph(); fp.paragraph_format.space_after = Pt(2); fp.paragraph_format.line_spacing = 1.14
-        run(fp, "Formulas:  ", size=9.1, bold=True, color=ACCENT)
-        for i, f in enumerate(fs):
-            run(fp, f"{f.get('name')} = {f.get('formula')}", size=8.7, font="Consolas", color=INK)
-            if i < len(fs) - 1:
-                run(fp, "       ", size=9)
+        fb = _shaded_para(doc, "#eef3fb", before=3, after=2, keep=False)
+        fb.paragraph_format.line_spacing = 1.22
+        run(fb, "  Formulas    ", size=8.6, bold=True, color=ACCENT)
+        for k, f in enumerate(fs):
+            run(fb, f"{f.get('name')} = {f.get('formula')}", size=8.2, font="Consolas", color=INK)
+            if k < len(fs) - 1:
+                run(fb, "         ", size=8.6)
+    # --- verdict (methodology steps) ---
+    ev = md.get("entity_verdict") or []
+    if ev:
+        vp = doc.add_paragraph(); vp.paragraph_format.space_before = Pt(1); vp.paragraph_format.space_after = Pt(6)
+        vp.paragraph_format.line_spacing = 1.16
+        run(vp, "How a verdict is reached:  ", size=8.7, bold=True, color=ACCENT)
+        for k, step in enumerate(ev, 1):
+            st = step.strip().rstrip(".")
+            if len(st) > 150:
+                st = st[:148].rstrip() + "…"
+            run(vp, f"({k}) {st}.  ", size=8.5, color=INK)
 
 
 def add_image(doc, path, width_in, caption=None):
@@ -493,10 +529,12 @@ def build():
     h1(doc, "Per-Module Methodology, Features & Formulas", "5")
     body(doc,
          "All eleven modules share one scoring model — health = clamp(100 − Σ capped penalties, 0, 100), "
-         "mapped to a risk tier, with each prediction labelled cold-start or trend. What differs per module "
-         "is the equipment it watches and the signals (features) it derives from the Grafana data. Each block "
-         "below states what the module does, the features it uses, and its distinctive formulas (the shared "
-         "health formula above is not repeated).", space_after=6)
+         "mapped to a risk tier, with each prediction labelled cold-start or trend. What differs per module is "
+         "the equipment it watches and the signals (features) it derives from the Grafana data. Each card below "
+         "gives, for one module: what it does (summary), its Signals (features) with source, its distinctive "
+         "Formulas (the shared health formula is not repeated), and How a verdict is reached (the step-by-step "
+         "methodology). This content is generated directly from each module's in-code methodology, so it always "
+         "matches the running system.", space_after=6)
     try:
         import modules  # noqa: F401  self-register
         from core.registry import all_modules, module_methodology

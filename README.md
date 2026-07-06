@@ -172,6 +172,29 @@ Open the port in the host firewall so other machines can reach it:
   Find the PC's IP with `ipconfig` (the `192.168.x.x` IPv4 address).
 - **Linux:** `sudo ufw allow 8800/tcp` (if `ufw` is active).
 
+### 6. Start automation
+The automation scheduler (APScheduler) starts **automatically inside the container** with the
+app — but it stays idle until you **enable a schedule** (nothing runs on its own by default).
+
+- **Dashboard:** open **Automation** → on the **Global (all modules)** row set **Enabled →
+  enabled**, an **Interval (min)** (e.g. `60`) and a **Data window** (e.g. `now-2d`) → **Save
+  schedule**. It shows the next run time. The first run fires after one interval — click **Run
+  now** once for an immediate first snapshot.
+- **Or via API (headless):**
+  ```bash
+  curl -X POST http://192.168.27.132:8800/api/automation \
+    -H "Content-Type: application/json" \
+    -d '{"scope":"global","enabled":true,"interval_minutes":60,"data_window":"now-2d"}'
+  curl -X POST http://192.168.27.132:8800/api/automation/run \
+    -H "Content-Type: application/json" -d '{"scope":"global","data_window":"now-2d"}'   # run once now
+  curl http://192.168.27.132:8800/api/automation                                          # status / next run
+  ```
+
+The schedule is persisted (`database/store/automation_config.csv`), so it **resumes
+automatically after a container restart** — enable it once. Confirm runs on the **PdM
+Triggers** page or via `docker compose logs -f pdm` (look for `automation firing`). `scope:
+global` runs every module each interval; use a module name to schedule just that one.
+
 ### Where the data lives
 `docker-compose.yml` **bind-mounts** the data to host folders next to the project, so it
 survives restarts/rebuilds and is easy to back up or analyse:
