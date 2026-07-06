@@ -29,8 +29,8 @@ found to be irrelevant (the mapping's prior corrections all hold up).
 
 ## CSV / MySQL storage requirement (Task 1) — already satisfied, verified
 
-- `STORAGE_BACKEND=csv` (in `.env`); `DATA_DIR=data` → all datasets persist under
-  `data/store/*.csv`, mirroring `db/schema.sql` 1:1.
+- `STORAGE_BACKEND=csv` (in `.env`); `DATA_DIR=database` → all datasets persist under
+  `database/store/*.csv`, mirroring `db/schema.sql` 1:1.
 - `core/storage/__init__.py::get_storage()` switches on `STORAGE_BACKEND`; the MySQL
   backend stays **dormant behind a second gate** (`MYSQL_CONFIRM=ENABLE`) so it can never
   connect by accident. No calling code changes when the backend is switched.

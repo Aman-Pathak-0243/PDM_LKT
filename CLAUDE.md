@@ -34,7 +34,10 @@ The grounding chapter on the physical system is `docs/notebook/01_intro_to_asrs.
    The MySQL schema is designed (`db/schema.sql`) and a dormant MySQL backend
    exists, but it must not connect until permission is given. The exact DB name
    will be shared after the Lift + Shuttle modules. **All data persists to CSV
-   datasets under `data/` in the meantime.**
+   datasets under `database/` (the single CSV store folder, `DATA_DIR=database`).**
+   Analysis-ready extracts for trends/EDA/ML (tidy time-series + per-module feature
+   matrices) are generated under `database/analytics/` by
+   `scripts/build_analytics_dataset.py`; the data dictionary is `database/README.md`.
 3. **Read `.env` for secrets and dashboard URLs. Never hardcode credentials.
    Never print the password** (not in logs, not in terminal output, not in docs).
 4. **Local/LAN only.** The app runs on one company PC, reachable only on company
@@ -90,7 +93,8 @@ modules/<name>/        one self-registering module per equipment type
 webapp/                FastAPI app: main dashboard + per-module pages + APIs
 db/schema.sql          MySQL schema (designed; applied only once permitted)
 docs/                  the PdM book (notebook chapters + mapping)
-data/                  CSV persistence store + fetched panel caches + archives (gitignored)
+database/              CSV data store (gitignored): store/ (live tables) + analytics/
+                       (tidy trend/EDA/ML extracts) + archive/ + exports/; see database/README.md
 logs/                  structured logs (gitignored)
 ```
 

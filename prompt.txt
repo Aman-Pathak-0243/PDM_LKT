@@ -1,0 +1,11 @@
+C:\Users\arya.khadgi2\Documents\PROJECTS\Predictive Maintenance\PDM_LKT
+
+Understand the codebase and documentations, markdownfiles etc.
+Rules:
+1. Whatever changes and updates you will do, everything should be documented into the relevent makdown file, and if the relevant markdown file does not exit, create one and update it with relevent info.
+2. There should not be the claude icon in the contributor's list of the repository, so you will not commit by yourself, instead you will suggest the proper commit message after the completion of the tasks, I will commit and push by myself.
+
+
+Task(s):
+1. Add a graphical interface on the overview panel, all the relevant and modern graphs should be there, also add one graphical overview tab in the overview section. the graphs should be relevent and cool in visuals.
+2. Also update the "ASRS_PdM_Notebook.docx" file in the docs.

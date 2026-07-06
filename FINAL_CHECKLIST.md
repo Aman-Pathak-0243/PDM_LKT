@@ -16,7 +16,7 @@
 - [x] Verify each module's health-scoring logic is correct; fix any logical errors found. — 28 confirmed + 9 plausible findings fixed across all 11 modules + core + webapp.
 - [x] Verify the panels each module consumes are relevant health signals; fix/flag if not. — no irrelevant panels; the mapping's prior source reassignments all hold; conveyor gained a stall signal, controller now requires the real idle column.
 - [x] Assess RCA quality per module; make RCA more insightful where it is weak. — gate (aisle common-cause leads), network (bounded downtime), tracker (pick-error surfaced), lift (fault timing), shuttle/meta labels, meta escalation consumed.
-- [x] Confirm CSV storage folder exists and an env toggle switches CSV ⇄ MySQL. — `STORAGE_BACKEND=csv`, `data/store/*.csv`, gated dormant MySQL backend; storage layer additionally hardened (atomic seq, lock safety, bool round-trip, deterministic ordering).
+- [x] Confirm CSV storage folder exists and an env toggle switches CSV ⇄ MySQL. — `STORAGE_BACKEND=csv`, `database/store/*.csv` (CSV-only; single `database/` folder incl. `analytics/` trend/EDA/ML extracts), gated dormant MySQL backend; storage layer additionally hardened (atomic seq, lock safety, bool round-trip, deterministic ordering).
 - [x] Run the regression tests and confirm green after fixes. — **31/31 pass** (19 pre-existing + 12 new).
 - [x] Print `done master`.
 - [x] Print the kickoff prompt for Session 2 (Tasks 2–8).

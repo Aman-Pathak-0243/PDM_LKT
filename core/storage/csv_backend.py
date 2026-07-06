@@ -2,9 +2,10 @@
 
 Each table is a CSV file under ``<DATA_DIR>/store/<table>.csv`` with a header row
 matching the schema. A sidecar ``<table>.seq`` file holds the last integer id.
-Writes take an OS-level advisory lock (``fcntl.flock``) plus an in-process lock,
-and are atomic (write-temp-then-rename), so concurrent manual + scheduled runs in
-the same process — or a stray second process — cannot corrupt a file.
+Writes take an OS-level advisory lock (``fcntl.flock`` on POSIX, ``msvcrt.locking``
+on Windows) plus an in-process lock, and are atomic (write-temp-then-rename), so
+concurrent manual + scheduled runs in the same process — or a stray second
+process — cannot corrupt a file.
 
 All values are stored as strings; types are coerced on read using
 :data:`core.storage.base.TABLE_SCHEMAS`, so the data round-trips faithfully and
@@ -15,8 +16,8 @@ from __future__ import annotations
 
 import csv
 import datetime as _dt
-import fcntl
 import os
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -39,6 +40,35 @@ from core.storage.base import (
     normalise_filter,
     to_json,
 )
+
+
+# --- Cross-platform OS-level advisory file lock ---------------------------- #
+# POSIX exposes ``fcntl.flock``; Windows has no ``fcntl`` module and uses
+# ``msvcrt.locking`` (byte-range lock) instead. Both back the same best-effort
+# second layer of protection behind the in-process ``threading.Lock``: they guard
+# against a stray second process, not same-process concurrency.
+if sys.platform == "win32":
+    import msvcrt
+
+    def _os_lock(fh) -> None:
+        # LK_LOCK takes an exclusive lock on 1 byte at the current offset; it
+        # blocks ~10s waiting for a busy lock, then raises OSError. The in-process
+        # lock already serialises same-process writers, so cross-process contention
+        # clears well within that window.
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+
+    def _os_unlock(fh) -> None:
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    def _os_lock(fh) -> None:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+
+    def _os_unlock(fh) -> None:
+        fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 class CsvBackend(StorageBackend):
@@ -161,7 +191,7 @@ class CsvBackend(StorageBackend):
             self._tl.acquire()
             try:
                 self._fh = open(self.backend._lockfile(self.table), "w")
-                fcntl.flock(self._fh, fcntl.LOCK_EX)
+                _os_lock(self._fh)
             except BaseException:
                 # If the OS-lock setup fails (fd/disk exhaustion), never leak the
                 # in-process lock — release it and re-raise.
@@ -175,7 +205,7 @@ class CsvBackend(StorageBackend):
         def __exit__(self, *exc):
             try:
                 if self._fh is not None:
-                    fcntl.flock(self._fh, fcntl.LOCK_UN)
+                    _os_unlock(self._fh)
                     self._fh.close()
                     self._fh = None
             finally:

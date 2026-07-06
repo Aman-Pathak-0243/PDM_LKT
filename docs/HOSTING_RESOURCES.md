@@ -58,7 +58,7 @@ the single largest DataFrame, not the sum of all modules.
 - **No runtime CDN / internet** — the frontend uses vendored JS/CSS so the dashboard
   works fully on an air-gapped LAN.
 - **Docker-ready** — a `Dockerfile` + `docker-compose.yml` exist for client delivery
-  (env-driven config, healthcheck on `/api/health`, a persistent `data/` volume).
+  (env-driven config, healthcheck on `/api/health`, a persistent data volume).
 
 ---
 
@@ -96,7 +96,7 @@ Other tables per year at hourly cadence: `pdm_run` ≈ 96 k rows (~30 MB), `trig
   year**. A **50–100 GB** disk holds **3–7 years** of full-resolution history plus
   archives/exports.
 - To bound growth without losing signal, use the **Storage** page's **archive** (move old
-  rows to `data/archive/`) or **delete-by-range**. A common policy: keep ~90 days at full
+  rows to `database/archive/`) or **delete-by-range**. A common policy: keep ~90 days at full
   resolution live, archive the rest.
 - **GTP** (~326 rows/run) and **Shuttle/Network** (124 each) are the biggest writers. If
   the store grows faster than desired, tighten those scopes' intervals or archive them
@@ -140,10 +140,10 @@ This is an **append-mostly, indexed-range-scan** workload — light for MySQL.
 
 ## 5. Backup & retention
 
-- **What to back up:** the entire **`data/`** directory (the CSV store, archives, and
-  exports) — that is the whole longitudinal history. Plus **`.env`** (secrets/URLs) stored
-  securely and separately.
-- **How often:** a nightly copy/snapshot of `data/` is sufficient (append-mostly, so
+- **What to back up:** the entire **`database/`** directory (the CSV store, analytics
+  extracts, archives, and exports) — that is the whole longitudinal history. Plus **`.env`**
+  (secrets/URLs) stored securely and separately.
+- **How often:** a nightly copy/snapshot of `database/` is sufficient (append-mostly, so
   incremental backups are cheap).
 - **When on MySQL:** use normal DB backups (`mysqldump` / snapshots) of the PdM database;
   the `scripts/db_migrate_export.py` tool also produces portable per-table exports and can

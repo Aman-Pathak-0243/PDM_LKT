@@ -90,6 +90,12 @@ def modules():
     return services.module_summaries()
 
 
+@router.get("/overview/analytics")
+def overview_analytics(window: Optional[str] = Query(None)):
+    """Fleet-wide rollups for the Overview page's Graphical Overview tab."""
+    return services.overview_analytics(window)
+
+
 @router.get("/modules/{name}/methodology")
 def module_methodology(name: str):
     from core.registry import all_modules, module_methodology as _mm

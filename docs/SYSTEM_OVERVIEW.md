@@ -117,9 +117,13 @@ excluded): [`module_dashboard_mapping.md`](mapping/module_dashboard_mapping.md).
 - **Automation** (APScheduler) fires runs on an interval (per module or `global`); manual
   **"Run PdM now"** coexists. Every run is a **traceable trigger** (id, type, status,
   window, duration, counts).
-- The **dashboard** (see [URL Map](URL_MAP.md)) provides: Overview tiles, per-module
-  component tables + RCA + trend, PdM triggers, automation control, storage management
-  (export/archive/delete), searchable logs, system/performance, and plugin/settings views.
+- The **dashboard** (see [URL Map](URL_MAP.md)) provides: an Overview with a **Module
+  Health** tab (tiles) and a **Graphical Overview** analytics tab (fleet health trend,
+  status donut, per-module risk breakdown, health-score distribution, an **aisle × module
+  risk heatmap**, top at-risk components, and time-to-maintenance — all dependency-free SVG,
+  offline on the LAN; see [Dashboard UI](DASHBOARD_UI.md)), per-module component tables + RCA
+  + trend, PdM triggers, automation control, storage management (export/archive/delete),
+  searchable logs, system/performance, and plugin/settings views.
 - **Operating it day-to-day:** [Operator SOP](OPERATOR_SOP.md). **Hosting it:**
   [Hosting Resources](HOSTING_RESOURCES.md). **Extending it:** [Developer Guide](DEVELOPER_GUIDE.md).
 
@@ -142,7 +146,7 @@ excluded): [`module_dashboard_mapping.md`](mapping/module_dashboard_mapping.md).
   core changes), a storage layer ready to scale from CSV to MySQL with zero code change,
   all features persisted as JSON so future ML/analytics can build on the accumulated
   history without re-fetching. Correctness was hardened in a full audit
-  ([`AUDIT_REPORT.md`](AUDIT_REPORT.md)); 31 automated tests guard the behaviour.
+  ([`AUDIT_REPORT.md`](AUDIT_REPORT.md)); 34 automated tests guard the behaviour.
 
 ---
 

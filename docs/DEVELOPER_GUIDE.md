@@ -143,7 +143,7 @@ All persistence goes through a `StorageBackend` ([`core/storage/base.py`](../cor
 `insert / select / count / delete / distinct / upsert / latest_per / stats`. The schema
 (`TABLE_SCHEMAS`) is the **runtime source of truth**; `db/schema.sql` is its MySQL twin.
 
-- **Active:** CSV (`data/store/<table>.csv` + a `.seq` id counter). Writes take an
+- **Active:** CSV (`database/store/<table>.csv` + a `.seq` id counter). Writes take an
   OS-level `flock` + in-process lock and are atomic (temp-file + `os.replace`), so
   concurrent manual + scheduled runs never corrupt a file.
 - **Dormant:** MySQL, behind a two-key gate — `STORAGE_BACKEND=mysql` **and**
@@ -155,6 +155,14 @@ All persistence goes through a `StorageBackend` ([`core/storage/base.py`](../cor
 Datetimes are UTC ISO-8601 strings in both backends (lexicographic range filters +
 ordering behave identically). JSON columns (`rca_json`, `metrics_json`, …) hold flexible
 metadata so future AI/ML/analytics never needs a migration.
+
+**Analysis-ready extracts (trends / EDA / ML).** The store keeps model features in JSON
+columns — great for the app, awkward for a data scientist. `scripts/build_analytics_dataset.py`
+reads the store (read-only) and writes flat, tidy CSVs under `database/analytics/`: a
+universal `component_health_timeseries.csv` (consistent columns across all modules — the
+trend backbone), per-module `by_module/<module>.csv` feature matrices (JSON flattened to
+`m_*` columns), `runs.csv`, and `data_dictionary.csv`. Re-run it after PdM runs or on a
+schedule. Full guide: [`database/README.md`](../database/README.md).
 
 ---
 
@@ -176,7 +184,7 @@ columns and types faithfully, re-assigns surrogate `id`s on the target (joins us
 **Step 1 — take a portable backup** (safety net; a timestamped folder of JSONL + manifest)
 ```bash
 .venv/bin/python scripts/db_migrate_export.py backup
-# -> data/exports/backup_<UTC-timestamp>/  (one .jsonl per table + manifest.json)
+# -> database/exports/backup_<UTC-timestamp>/  (one .jsonl per table + manifest.json)
 ```
 
 **Step 2a — move to a fresh CSV store** (e.g. a bigger disk / new location)
@@ -202,7 +210,7 @@ MYSQL_CONFIRM=ENABLE .venv/bin/python scripts/db_migrate_export.py copy --to-mys
 
 **Restore a backup** (inverse of Step 1) into the active store or an explicit target:
 ```bash
-.venv/bin/python scripts/db_migrate_export.py load --from data/exports/backup_<ts>
+.venv/bin/python scripts/db_migrate_export.py load --from database/exports/backup_<ts>
 .venv/bin/python scripts/db_migrate_export.py load --from <folder> --to-csv /mnt/big/pdm_store
 ```
 

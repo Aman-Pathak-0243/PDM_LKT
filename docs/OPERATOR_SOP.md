@@ -180,13 +180,13 @@ When a tile is amber/red:
 
 ## 7. Housekeeping (Storage page)
 
-The store (`data/store/`) grows a little every run — it's the memory that makes
+The store (`database/store/`) grows a little every run — it's the memory that makes
 predictions sharpen over time, so **don't delete it casually**. Manage it here:
 
 - **See size & growth:** total size, per-table rows/size, and "added last 24 h".
 - **Export** (for a report or hand-off): pick a table + date range → **CSV / JSON /
   Excel**.
-- **Archive** old rows: moves rows older than a date into `data/archive/` (kept, just out
+- **Archive** old rows: moves rows older than a date into `database/archive/` (kept, just out
   of the active store) — use this to keep the store lean without losing history.
 - **Delete** by date range: permanent; requires a confirm and is logged. Only for data
   you're sure you don't need.

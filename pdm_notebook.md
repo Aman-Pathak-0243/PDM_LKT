@@ -46,6 +46,9 @@ this order: Chapter 1, Chapter 2, one chapter per module, then the data-volume c
 - [Hosting Resources](docs/HOSTING_RESOURCES.md) — machine spec, DB-size projection, LAN/firewall, backup.
 - [Developer Guide](docs/DEVELOPER_GUIDE.md) — architecture, adding a module, and the DB backup/export/migration workflow.
 - [URL / Route Map](docs/URL_MAP.md) — every dashboard page + JSON endpoint.
+- [Dashboard UI & Graphical Overview](docs/DASHBOARD_UI.md) — the Overview page's Module-Health + Graphical-Overview tabs, every fleet chart, its data source, and the dependency-free SVG chart rules.
 - [Per-Module Health Methodology](docs/MODULE_METHODOLOGY.md) — panels → fields → algorithm, per module.
+- [CSV Database — data dictionary](database/README.md) — the single CSV `database/` folder (store + analytics extracts + archive/exports), how it's laid out for trends/EDA/ML, and quick-start recipes.
+- [Analytics dataset builder](scripts/build_analytics_dataset.py) — flatten the store into tidy trend/EDA/ML CSVs under `database/analytics/` (universal time-series + per-module feature matrices + data dictionary).
 - [Migration/export script](scripts/db_migrate_export.py) — backup / copy / load / verify the store (CSV↔MySQL).
 - **[ASRS_PdM_Notebook.docx](docs/ASRS_PdM_Notebook.docx)** — the compiled Word notebook (all of the above + module chapters), rebuilt via [`scripts/build_notebook.py`](scripts/build_notebook.py).

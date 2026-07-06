@@ -733,3 +733,104 @@ def test_meta_worst_tier_unknown_is_severe():
     assert _worst_tier(["warn", "severe"]) == "severe" or _worst_tier(["warn", "severe"]) == "critical"
     # an unknown tier must never be treated as less severe than a real flag
     assert _worst_tier(["warn", "zzz"]) != "warn"
+
+
+# =========================================================================== #
+# Graphical Overview analytics (Overview page "Graphical Overview" tab).
+# =========================================================================== #
+def test_overview_aisle_and_window_helpers():
+    from webapp.services import _parse_aisle, _aisle_of, _window_to_hours
+    # aisle token normalisation (varied id shapes)
+    assert _parse_aisle("aisle_04_inbound_lift_02") == "aisle_04"
+    assert _parse_aisle("aisle_4") == "aisle_04"
+    assert _parse_aisle("zone_2") is None
+    # metrics_json.aisle is authoritative for ids that carry no literal aisle token
+    assert _aisle_of({"component_id": "QD_Shuttle_03_06", "metrics_json": {"aisle": "aisle_03"}}) == "aisle_03"
+    assert _aisle_of({"component_id": "002-04-1-221-1-02", "metrics_json": {"aisle": "aisle_02"}}) == "aisle_02"
+    assert _aisle_of({"component_id": "db_controller", "metrics_json": {}}) is None
+    # relative-window -> hours (Grafana style, case-sensitive: 'm'=minutes, 'M'=months)
+    assert _window_to_hours("now-2d") == 48.0
+    assert _window_to_hours("now-6h") == 6.0
+    assert _window_to_hours("now-7d") == 168.0
+    assert _window_to_hours("now-30m") == 0.5     # lowercase m = minutes, NOT months
+    assert _window_to_hours("now-2M") == 1440.0   # uppercase M = months (2*720h)
+    assert _window_to_hours("garbage") == 168.0   # safe 7-day default
+
+
+def _seed_health(be, rows):
+    for r in rows:
+        base = {"run_uid": "r", "component_type": "x", "predicted_ttm_hours": None,
+                "confidence": 0.5, "prediction_regime": "coldstart", "primary_cause": "",
+                "rca_json": {}, "metrics_json": {}, "created_at": now_iso()}
+        base.update(r)
+        be.insert("component_health", [base])
+
+
+def test_overview_analytics_empty_shapes(tmp_path, monkeypatch):
+    import webapp.services as svc
+    import modules  # noqa: F401  register modules
+    be = CsvBackend(tmp_path); be.init_schema()
+    monkeypatch.setattr(svc, "get_storage", lambda: be)
+    a = svc.overview_analytics("now-7d")
+    assert a["has_data"] is False
+    assert a["kpis"]["total_components"] == 0
+    assert [d["tier"] for d in a["tier_distribution"]] == ["critical", "warn", "watch", "ok"]
+    assert len(a["score_histogram"]) == 10
+    assert a["fleet_trend"] == [] and a["aisle_matrix"]["cells"] == []
+    assert a["kpis"]["modules_total"] >= 1  # registry populated
+
+
+def test_overview_analytics_aggregates(tmp_path, monkeypatch):
+    import webapp.services as svc
+    import modules  # noqa: F401
+    be = CsvBackend(tmp_path); be.init_schema()
+    monkeypatch.setattr(svc, "get_storage", lambda: be)
+    _seed_health(be, [
+        {"module": "lift", "component_id": "aisle_01_inbound_lift_01", "health_score": 20.0,
+         "risk_tier": "critical", "predicted_ttm_hours": 5.0, "prediction_regime": "trend",
+         "metrics_json": {"aisle": "aisle_01"}},
+        {"module": "lift", "component_id": "aisle_02_inbound_lift_01", "health_score": 92.0,
+         "risk_tier": "ok", "metrics_json": {"aisle": "aisle_02"}},
+        # id carries no literal aisle token; metrics_json.aisle drives the heatmap
+        {"module": "network", "component_id": "QD_Shuttle_03_06", "health_score": 55.0,
+         "risk_tier": "warn", "predicted_ttm_hours": 60.0, "metrics_json": {"aisle": "aisle_03"}},
+        {"module": "conveyor", "component_id": "zone_2", "health_score": 70.0, "risk_tier": "watch"},
+    ])
+    a = svc.overview_analytics("now-30d")
+    k = a["kpis"]
+    assert a["has_data"] is True and k["total_components"] == 4
+    assert k["critical"] == 1 and k["warn"] == 1 and k["watch"] == 1 and k["ok"] == 1
+    assert k["imminent"] == 1                       # only the ttm<=24 critical lift
+    assert 55 < k["avg_health"] < 62               # (20+92+55+70)/4 = 59.25
+    # top-at-risk excludes the ok component, worst-first
+    ids = [c["component_id"] for c in a["top_at_risk"]]
+    assert ids[0] == "aisle_01_inbound_lift_01" and "aisle_02_inbound_lift_01" not in ids
+    # ttm buckets: 5h -> <=24h, 60h -> 1-3d
+    bucket = {b["label"]: b["count"] for b in a["ttm_buckets"]}
+    assert bucket["≤24h"] == 1 and bucket["1–3d"] == 1
+    # heatmap: network component mapped by metrics aisle (not its id), conveyor excluded (no aisle)
+    hm = a["aisle_matrix"]
+    assert "aisle_03" in hm["aisles"]
+    assert "network" in [m["name"] for m in hm["modules"]]
+    assert "conveyor" not in [m["name"] for m in hm["modules"]]
+    net_cell = next(c for c in hm["cells"] if c["module"] == "network")
+    assert net_cell["aisle"] == "aisle_03" and net_cell["worst_tier"] == "warn"
+    # fleet trend has at least one bucketed point
+    assert a["fleet_trend"] and a["fleet_trend"][0]["v"] > 0
+
+
+def test_overview_ttm_boundary_imminent_consistent(tmp_path, monkeypatch):
+    """A component at exactly ttm==24.0 must count as imminent AND land in '≤24h'
+    (KPI and chart bucket agree at the boundary — 24.0 is a common cold-start band)."""
+    import webapp.services as svc
+    import modules  # noqa: F401
+    be = CsvBackend(tmp_path); be.init_schema()
+    monkeypatch.setattr(svc, "get_storage", lambda: be)
+    _seed_health(be, [
+        {"module": "lift", "component_id": "aisle_01_inbound_lift_09", "health_score": 30.0,
+         "risk_tier": "critical", "predicted_ttm_hours": 24.0, "metrics_json": {"aisle": "aisle_01"}},
+    ])
+    a = svc.overview_analytics("now-7d")
+    bucket = {b["label"]: b["count"] for b in a["ttm_buckets"]}
+    assert a["kpis"]["imminent"] == 1
+    assert bucket["≤24h"] == 1 and bucket["1–3d"] == 0  # 24.0 in ≤24h, not 1–3d

@@ -195,7 +195,7 @@ def get_config() -> Config:
         database=database,
         app=app,
         storage_backend=storage_backend,
-        data_dir=_resolve_dir(env, "DATA_DIR", "data"),
+        data_dir=_resolve_dir(env, "DATA_DIR", "database"),
         log_dir=_resolve_dir(env, "LOG_DIR", "logs"),
         fetch_default_window=env.get("FETCH_DEFAULT_WINDOW", "now-2d"),
         raw=env,

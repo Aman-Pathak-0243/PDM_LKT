@@ -41,6 +41,7 @@ STRUCTURE: List[Tuple[str, List[Tuple[str, str]]]] = [
         ("Operator SOP", "docs/OPERATOR_SOP.md"),
         ("Hosting Resources", "docs/HOSTING_RESOURCES.md"),
         ("URL / Route Map", "docs/URL_MAP.md"),
+        ("Dashboard UI & Graphical Overview", "docs/DASHBOARD_UI.md"),
     ]),
     ("Part III — Engineering & Reference", [
         ("Developer Guide", "docs/DEVELOPER_GUIDE.md"),
@@ -64,6 +65,7 @@ STRUCTURE: List[Tuple[str, List[Tuple[str, str]]]] = [
     ]),
     ("Part V — Data Volume", [
         ("Chapter 3 — Data Volume", "docs/notebook/03_data_volume.md"),
+        ("CSV Database — Data Dictionary (trends / EDA / ML)", "database/README.md"),
     ]),
     ("Appendix", [
         ("Appendix A — Durable Conventions (CLAUDE.md)", "CLAUDE.md"),

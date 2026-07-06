@@ -28,7 +28,7 @@ Examples
     # See what's in the active store
     .venv/bin/python scripts/db_migrate_export.py stats
 
-    # Portable backup of everything to a timestamped folder under data/exports/
+    # Portable backup of everything to a timestamped folder under <DATA_DIR>/exports/
     .venv/bin/python scripts/db_migrate_export.py backup
 
     # Move the whole store to a fresh CSV location (e.g. a bigger disk)
@@ -38,7 +38,7 @@ Examples
     MYSQL_CONFIRM=ENABLE .venv/bin/python scripts/db_migrate_export.py copy --to-mysql
 
     # Load a previous backup into the active store (or a target)
-    .venv/bin/python scripts/db_migrate_export.py load --from data/exports/backup_20260701T120000
+    .venv/bin/python scripts/db_migrate_export.py load --from database/exports/backup_20260701T120000
     # Confirm a migration moved everything
     MYSQL_CONFIRM=ENABLE .venv/bin/python scripts/db_migrate_export.py verify --to-mysql
 """
@@ -56,6 +56,7 @@ from typing import Any, Dict, List, Optional
 # Make the repo importable when run as a script.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from core.config import get_config  # noqa: E402
 from core.logging_setup import get_logger, setup_logging  # noqa: E402
 from core.storage import get_storage  # noqa: E402
 from core.storage.base import StorageBackend, TABLE_SCHEMAS  # noqa: E402
@@ -129,7 +130,7 @@ def op_stats(_args: argparse.Namespace) -> int:
 def op_backup(args: argparse.Namespace) -> int:
     src = get_storage()
     ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%dT%H%M%S")
-    out_dir = Path(args.out) if args.out else (Path("data") / "exports" / f"backup_{ts}")
+    out_dir = Path(args.out) if args.out else (get_config().data_dir / "exports" / f"backup_{ts}")
     out_dir.mkdir(parents=True, exist_ok=True)
     manifest: Dict[str, Any] = {"created_at": ts, "backend": src.backend_name, "tables": {}}
     for table in TABLE_SCHEMAS:
@@ -237,7 +238,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     sub.add_parser("stats", help="print per-table row counts + sizes of the active store")
 
     b = sub.add_parser("backup", help="dump the active store to a portable JSONL folder")
-    b.add_argument("--out", help="output folder (default: data/exports/backup_<ts>)")
+    b.add_argument("--out", help="output folder (default: <DATA_DIR>/exports/backup_<ts>)")
 
     def add_target(sp):
         g = sp.add_mutually_exclusive_group()

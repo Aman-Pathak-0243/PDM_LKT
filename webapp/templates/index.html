@@ -1,13 +1,79 @@
 {% extends "base.html" %}
 {% block heading %}System Overview{% endblock %}
 {% block content %}
-<div class="section">
-  <h3>Module health</h3>
-  <p class="muted" style="margin-top:-4px">One tile per registered PdM module. Worst-component status and last run. Click a tile for per-component detail.</p>
-  <div id="modules" class="grid cols-4">
-    {% for m in modules %}
-    <div class="card"><div class="tile-title">{{ m.title }}</div><div class="kpi-sub">loading…</div></div>
-    {% endfor %}
-  </div>
+<div class="tabs" role="tablist">
+  <button class="tab active" data-tab="health" role="tab">Module Health</button>
+  <button class="tab" data-tab="graphs" role="tab">Graphical Overview</button>
 </div>
+
+<section id="tab-health" class="tab-panel active">
+  <div class="section">
+    <h3>Module health</h3>
+    <p class="muted" style="margin-top:-4px">One tile per registered PdM module. Worst-component status and last run. Click a tile for per-component detail.</p>
+    <div id="modules" class="grid cols-4">
+      {% for m in modules %}
+      <div class="card"><div class="tile-title">{{ m.title }}</div><div class="kpi-sub">loading…</div></div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section id="tab-graphs" class="tab-panel" hidden>
+  <div class="section">
+    <h3>Fleet at a glance</h3>
+    <p class="muted" style="margin-top:-4px">Cross-module analytics over the accumulated health store. Charts scope to the selected window; hover any mark for detail.</p>
+    <div id="kpi-row" class="kpi-row"></div>
+  </div>
+
+  <div id="graphs-empty" class="empty" hidden>
+    No scored components yet. Run a PdM trigger (top-right “Run PdM (all)”) — every run snapshots component health and these charts fill in.
+  </div>
+
+  <div id="graphs-body">
+    <div class="grid cols-3 chart-grid">
+      <div class="card chart-card span-2">
+        <div class="chart-head"><h2>Fleet health trend</h2><span class="chart-note">avg health across all components over the window</span></div>
+        <div id="ch-trend" class="chart-box"></div>
+      </div>
+      <div class="card chart-card">
+        <div class="chart-head"><h2>Fleet status mix</h2></div>
+        <div id="ch-donut" class="chart-box donut-wrap"></div>
+        <div id="ch-donut-lg" class="legend"></div>
+      </div>
+    </div>
+
+    <div class="grid cols-2 chart-grid">
+      <div class="card chart-card">
+        <div class="chart-head"><h2>Risk breakdown by module</h2><span class="chart-note">components per risk tier</span></div>
+        <div id="ch-modules-lg" class="legend"></div>
+        <div id="ch-modules" class="chart-box"></div>
+      </div>
+      <div class="card chart-card">
+        <div class="chart-head"><h2>Health-score distribution</h2><span class="chart-note">components per 10-point band</span></div>
+        <div id="ch-hist" class="chart-box"></div>
+      </div>
+    </div>
+
+    <div class="grid cols-1 chart-grid">
+      <div class="card chart-card">
+        <div class="chart-head"><h2>Aisle × module risk map</h2><span class="chart-note">worst component tier per aisle & equipment type — six-aisle ASRS layout</span></div>
+        <div id="ch-heat" class="chart-box"></div>
+        <div id="ch-heat-lg" class="legend"></div>
+      </div>
+    </div>
+
+    <div class="grid cols-2 chart-grid">
+      <div class="card chart-card">
+        <div class="chart-head"><h2>Top at-risk components</h2><span class="chart-note">lowest health, worst-first</span></div>
+        <div id="ch-risk" class="chart-box"></div>
+      </div>
+      <div class="card chart-card">
+        <div class="chart-head"><h2>Time-to-maintenance</h2><span class="chart-note">estimated window for flagged components</span></div>
+        <div id="ch-ttm" class="chart-box"></div>
+      </div>
+    </div>
+
+    <p id="graphs-meta" class="muted chart-meta"></p>
+  </div>
+</section>
 {% endblock %}

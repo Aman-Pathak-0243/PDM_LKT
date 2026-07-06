@@ -9,7 +9,12 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
-# Runtime data (CSV persistence store, fetched panel caches, archives)
+# Runtime data (CSV persistence store, analytics extracts, caches, archives)
+# The CSV "database" folder holds local plant data — never committed. Its README
+# (data dictionary) IS tracked; the CSV/JSON data files are not. Use database/*
+# (not database/) so the negation below can re-include the README.
+database/*
+!database/README.md
 data/
 *.csv
 

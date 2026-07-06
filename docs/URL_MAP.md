@@ -19,7 +19,7 @@ Top-nav order. Each page loads data from the `/api/*` endpoints noted in "Backed
 
 | Route | Page | What you see / do | Backed by |
 |-------|------|-------------------|-----------|
-| `GET /` | **Overview** | One **tile per module**: worst-component tier, per-tier counts, last-run time. Pick a **window** (top-right) and **Run PdM (all)**, or run a single module from its tile. The home screen. | `/api/modules`, `/api/run` |
+| `GET /` | **Overview** | Two tabs. **Module Health** — one **tile per module**: worst-component tier, per-tier counts, last-run time. **Graphical Overview** — fleet-wide analytics (KPI row + trend, status donut, per-module risk, score distribution, aisle×module heatmap, top at-risk, TTM). Pick a **window** (top-right) and **Run PdM (all)**, or run a single module from its tile. The home screen. See [Dashboard UI](DASHBOARD_UI.md). | `/api/modules`, `/api/overview/analytics`, `/api/run` |
 | `GET /module/{name}` | **Module detail** | Per-component table (worst-first): score, tier, TTM, confidence, regime. Click a row → **RCA** + **health trend**. In-page **Methodology** section. Optional **Mark maintenance done**. `{name}` ∈ lift, shuttle, conveyor, tracker, gate, bin_mech, gtp_station, decant_station, network, controller, meta. | `/api/modules/{name}/components`, `.../methodology`, `.../components/{cid}/history`, `/api/ack` |
 | `GET /triggers` | **PdM Triggers** | Every manual + automated run — id, type, status, window, duration, counts. Click one for its per-module run breakdown. | `/api/triggers`, `/api/triggers/{id}` |
 | `GET /automation` | **Automation** | Enable/disable automation per **scope** (`global` or a module), set **interval** + **window**; shows **"next trigger at …"**. Runs in the terminal process, independent of the browser. | `/api/automation`, `/api/automation/run` |
@@ -44,6 +44,7 @@ Top-nav order. Each page loads data from the `/api/*` endpoints noted in "Backed
 | Method + path | Purpose | Key params |
 |---------------|---------|------------|
 | `GET /api/modules` | Summary per module: tier rollup, counts, configured?, last run. Backs the Overview tiles. | — |
+| `GET /api/overview/analytics` | Fleet-wide rollups for the Overview **Graphical Overview** tab: KPIs, tier distribution, per-module breakdown, health-score histogram, aisle×module risk matrix, top at-risk, TTM buckets, and a time-bucketed fleet-health trend. Degrades to empty-but-valid shapes on a cold store. | `window` (relative, scopes the trend) |
 | `GET /api/modules/{name}/methodology` | The module's methodology dict (signals, entity-verdict steps, formulas) merged with the shared overall-status rollup. Rendered in-page. | — |
 | `GET /api/modules/{name}/components` | Latest health row per component (worst-first). | — |
 | `GET /api/modules/{name}/components/{cid}/history` | Longitudinal history for one component (for the trend chart). | `limit` (default 300) |
@@ -71,7 +72,7 @@ Top-nav order. Each page loads data from the `/api/*` endpoints noted in "Backed
 | Method + path | Purpose | Params / body |
 |---------------|---------|---------------|
 | `GET /api/storage` | Store overview: backend, total size/rows, per-dataset size/rows/last-modified/24h-growth. | — |
-| `GET /api/storage/archives` | List archive files under `data/archive/`. | — |
+| `GET /api/storage/archives` | List archive files under `database/archive/`. | — |
 | `GET /api/storage/export` | Download a table (filtered) as CSV / JSON / Excel. Returns a file attachment. | `table` (req), `fmt` (csv\|json\|xlsx), `date_from`, `date_to`, `trigger_id`, `module` |
 | `POST /api/storage/delete` | Delete matching rows (requires `confirm:true`); audited. | `{ table, date_from?, date_to?, trigger_id?, module?, confirm }` |
 | `POST /api/storage/archive` | Move rows older than `before` to an archive CSV + delete from the active store; audited. | `{ table, before }` |

@@ -92,3 +92,44 @@ details.rca summary { cursor:pointer; }
 .form-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:12px; align-items:end; }
 label.field { display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--muted); }
 .empty { color: var(--muted); padding: 18px; text-align:center; }
+
+/* ---- Overview tabs ---- */
+.tabs { display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:18px; }
+.tab { background:transparent; border:none; border-bottom:2px solid transparent; color:var(--muted); padding:10px 16px; cursor:pointer; font-weight:600; font-size:13px; border-radius:8px 8px 0 0; }
+.tab:hover { color:var(--text); background:var(--panel-2); }
+.tab.active { color:var(--text); border-bottom-color:var(--accent); }
+.tab-panel[hidden] { display:none; }
+
+/* ---- KPI stat tiles ---- */
+.kpi-row { display:grid; grid-template-columns: repeat(6,1fr); gap:12px; }
+@media (max-width:1200px){ .kpi-row{ grid-template-columns: repeat(3,1fr);} }
+@media (max-width:640px){ .kpi-row{ grid-template-columns: repeat(2,1fr);} }
+.stat { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 14px 12px; box-shadow:var(--shadow); position:relative; overflow:hidden; }
+.stat::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent-2); opacity:.65; }
+.stat-label { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+.stat-val { font-size:28px; font-weight:700; margin-top:3px; line-height:1.05; }
+.stat-sub { color:var(--muted); font-size:11px; margin-top:6px; min-height:26px; display:flex; align-items:center; }
+.stat-sub svg { display:block; }
+
+/* ---- Chart cards ---- */
+.chart-grid { margin-bottom:16px; }
+.cols-1 { grid-template-columns: 1fr; }
+.span-2 { grid-column: span 2; }
+@media (max-width:1100px){ .span-2{ grid-column:auto; } }
+.chart-card { display:flex; flex-direction:column; min-width:0; }
+.chart-card { position:relative; }
+.chart-head { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+.chart-head h2 { margin:0; font-size:14px; text-transform:none; letter-spacing:0; color:var(--text); }
+.chart-note { color:var(--muted); font-size:11px; }
+.chart-box { width:100%; min-height:40px; }
+.donut-wrap { display:flex; justify-content:center; align-items:center; padding:4px 0; }
+.chart-meta { font-size:11px; margin-top:2px; }
+
+/* ---- Legend ---- */
+.legend { display:flex; flex-wrap:wrap; gap:12px; margin:8px 0 2px; }
+.lg { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); text-transform:capitalize; }
+.lg-sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
+.lg b { color:var(--text); font-weight:700; }
+
+/* ---- Chart crosshair tooltip ---- */
+.chart-tip { position:absolute; pointer-events:none; background:var(--panel-2); border:1px solid var(--accent); border-radius:8px; padding:6px 9px; font-size:12px; color:var(--text); box-shadow:var(--shadow); white-space:nowrap; z-index:6; }

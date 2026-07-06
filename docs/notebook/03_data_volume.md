@@ -6,8 +6,14 @@
 ## How volume is measured
 
 `scripts/inspect_lift.py sample` downloads each panel's CSV for a window and records
-the row count, columns, and dtypes into `data/inspection/`. The PdM write footprint
-is derived from the schema (rows written per run) and the CSV row sizes.
+the row count, columns, and dtypes into a dev-time `data/inspection/` scratch dir (panel
+sampling only, not persisted PdM data). The PdM write footprint is derived from the schema
+(rows written per run) and the CSV row sizes.
+
+All **persisted** PdM data is **CSV-only**, under the single **`database/`** folder (`DATA_DIR=database`):
+`store/` (live tables), `analytics/` (tidy trend/EDA/ML extracts built by
+`scripts/build_analytics_dataset.py`), `archive/`, and `exports/`. Data dictionary:
+[`database/README.md`](../../database/README.md).
 
 ## Fetch volume — LIFT sources (sampled 2026-06-30)
 
@@ -46,7 +52,7 @@ A full LIFT fetch (primary + 2 secondaries) pulls ≈ **4.8k rows** in ~20–35 
 These are comfortably within a single-PC CSV store. As more modules register, scale
 roughly linearly with `Σ components`. The Storage Management page reports live
 sizes/record-counts/growth, and supports **archive** (move old rows to
-`data/archive/`) and **delete by range** to cap footprint. When the store is later
+`database/archive/`) and **delete by range** to cap footprint. When the store is later
 moved to MySQL, the same row counts apply and the `(module, component_id, created_at)`
 index keeps trend queries fast.
 

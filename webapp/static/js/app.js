@@ -98,6 +98,122 @@
     });
   }
 
+  // ---- graphical overview (analytics tab) --------------------------------
+  const TIERS = ["critical", "warn", "watch", "ok"];
+  const tierRank = (t) => { const i = TIERS.indexOf(t); return i < 0 ? TIERS.length : i; };
+  const shortTitle = (t) => String(t || "").replace(/\s*PdM$/, "");
+  const aisleLabel = (a) => String(a || "").replace(/^aisle_0*/, "Aisle ");
+  let analyticsLoaded = false, lastAnalytics = null;
+
+  async function initAnalytics() {
+    const kpiRow = $("#kpi-row"); if (!kpiRow) return;
+    let a;
+    try { a = await api("/api/overview/analytics?window=" + encodeURIComponent(win() || "")); }
+    catch (e) { kpiRow.innerHTML = `<div class="empty">analytics unavailable: ${e.message}</div>`; return; }
+    analyticsLoaded = true; lastAnalytics = a;
+    renderAnalytics(a);
+  }
+
+  function renderAnalytics(a) {
+    if (!a) return;
+    renderKpis(a);
+    const body = $("#graphs-body"), empty = $("#graphs-empty");
+    if (!a.has_data) { if (body) body.hidden = true; if (empty) empty.hidden = false; return; }
+    if (empty) empty.hidden = true; if (body) body.hidden = false;
+    const C = window.Charts;
+
+    // Fleet health trend (area + crosshair)
+    C.area($("#ch-trend"), (a.fleet_trend || []).map((p) => ({ t: fmtDate(p.t), v: p.v, n: p.n })), { height: 210 });
+
+    // Fleet status donut + legend
+    const segs = (a.tier_distribution || []).map((d) => ({ label: d.tier, value: d.count, color: C.tierColor(d.tier) }));
+    C.donut($("#ch-donut"), segs, { center: { value: a.kpis.total_components, label: "components" } });
+    C.legend($("#ch-donut-lg"), segs.map((s) => ({ label: s.label, color: s.color, value: s.value })));
+
+    // Risk breakdown by module (stacked horizontal)
+    const crit = (m) => (m.tier_counts || {}).critical || 0;
+    const mrows = (a.modules || []).filter((m) => m.component_count > 0)
+      .sort((x, y) => tierRank(x.worst_tier) - tierRank(y.worst_tier) || crit(y) - crit(x))
+      .map((m) => ({
+        label: shortTitle(m.title),
+        sub: `${m.component_count} ${m.component_type}s · avg ${m.avg_health == null ? "—" : m.avg_health}`,
+        segments: TIERS.map((t) => ({ key: t, value: (m.tier_counts || {})[t] || 0, color: C.tierColor(t) })),
+      }));
+    C.stackedBarH($("#ch-modules"), mrows);
+    C.legend($("#ch-modules-lg"), TIERS.map((t) => ({ label: t, color: C.tierColor(t) })));
+
+    // Health-score distribution
+    C.bars($("#ch-hist"), (a.score_histogram || []).map((b) => ({
+      label: String(b.lo), tipLabel: `${b.lo}–${b.hi}`, value: b.count, color: C.tierColor(b.tier),
+    })));
+
+    // Aisle × module heatmap
+    const m = a.aisle_matrix || { aisles: [], modules: [], cells: [] };
+    const idx = {}; (m.cells || []).forEach((c) => (idx[c.aisle + "|" + c.module] = c));
+    C.heatmap($("#ch-heat"), {
+      rows: (m.aisles || []).map((x) => ({ key: x, label: aisleLabel(x) })),
+      cols: (m.modules || []).map((x) => ({ key: x.name, label: shortTitle(x.title) })),
+      cell: (r, c) => {
+        const cd = idx[r + "|" + c]; if (!cd) return null;
+        return {
+          color: C.tierColor(cd.worst_tier), text: cd.count,
+          tip: `${aisleLabel(r)} · ${c}: ${cd.worst_tier} · ${cd.count} comps · avg ${cd.avg_health == null ? "—" : cd.avg_health}`,
+        };
+      },
+    });
+    C.legend($("#ch-heat-lg"), [...TIERS.map((t) => ({ label: t, color: C.tierColor(t) })), { label: "no data", color: "#141a22" }]);
+
+    // Top at-risk components (bar encodes risk = 100 − health, worst-first)
+    C.barsH($("#ch-risk"), (a.top_at_risk || []).map((c) => ({
+      label: c.component_id,
+      value: 100 - (c.health_score == null ? 100 : c.health_score),
+      valueLabel: c.health_score == null ? "—" : c.health_score,
+      color: C.tierColor(c.risk_tier),
+      sub: `${shortTitle(c.module_title)} · ${c.primary_cause || c.risk_tier}`,
+    })), { max: 100 });
+
+    // Time-to-maintenance buckets (sooner = worse tier colour)
+    const ttmColor = { "≤24h": "critical", "1–3d": "warn", "3–7d": "watch", ">7d": "ok" };
+    C.bars($("#ch-ttm"), (a.ttm_buckets || []).map((b) => ({
+      label: b.label, value: b.count, color: C.tierColor(ttmColor[b.label] || "unknown"),
+    })));
+
+    const meta = $("#graphs-meta");
+    if (meta) meta.textContent =
+      `${a.kpis.total_components} components across ${a.kpis.modules_total} modules · ` +
+      `window ${a.window || "default"} · generated ${fmtDate(a.generated_at)}`;
+  }
+
+  function renderKpis(a) {
+    const k = a.kpis || {};
+    const healthTier = scoreTier(k.avg_health);
+    const spark = window.Charts.sparkSVG((a.fleet_trend || []).map((p) => p.v), 130, 26, window.Charts.tierColor(healthTier));
+    const tile = (label, value, sub, color) =>
+      `<div class="stat"><div class="stat-label">${label}</div>` +
+      `<div class="stat-val"${color ? ` style="color:${color}"` : ""}>${value}</div>` +
+      `<div class="stat-sub">${sub || ""}</div></div>`;
+    $("#kpi-row").innerHTML = [
+      tile("Fleet health", k.avg_health == null ? "—" : k.avg_health,
+        spark || "avg component health", k.avg_health == null ? null : window.Charts.tierColor(healthTier)),
+      tile("Components monitored", k.total_components || 0,
+        `${k.modules_configured}/${k.modules_total} modules configured`),
+      tile("Critical", k.critical || 0, "immediate attention", k.critical ? window.Charts.tierColor("critical") : null),
+      tile("Warnings", k.warn || 0, "degrading units", k.warn ? window.Charts.tierColor("warn") : null),
+      tile("Imminent", k.imminent || 0, "predicted maint. ≤24h", k.imminent ? window.Charts.tierColor("critical") : null),
+      tile("Trend coverage", `${k.trend || 0}/${k.total_components || 0}`,
+        `${k.coldstart || 0} still cold-start`),
+    ].join("");
+  }
+
+  function activateTab(name) {
+    $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
+    $$(".tab-panel").forEach((p) => {
+      const on = p.id === "tab-" + name;
+      p.classList.toggle("active", on); p.hidden = !on;
+    });
+    if (name === "graphs" && !analyticsLoaded) initAnalytics();
+  }
+
   async function renderMethodology(name) {
     const box = $("#methodology-body"); if (!box) return;
     try {
@@ -361,12 +477,26 @@
     ({ overview: initOverview, triggers: initTriggers, automation: initAutomation,
        storage: initStorage, logs: initLogs, system: initSystem, plugins: initPlugins }[PAGE] || function(){})();
     if (PAGE === "overview" && $("#module-root")) initModule();
+    if (PAGE === "overview" && analyticsLoaded) initAnalytics();  // refresh charts after a run
   }
 
   // ---- boot --------------------------------------------------------------
   document.addEventListener("DOMContentLoaded", () => {
     const rb = $("#run-all"); if (rb) rb.addEventListener("click", () => runNow(null));
     window.PdM = { runNow, searchLogs, doDelete, doArchive };
+    // Overview tabs (Module Health / Graphical Overview)
+    $$(".tab").forEach((t) => t.addEventListener("click", () => activateTab(t.dataset.tab)));
+    // Window control re-scopes the analytics charts when they are showing.
+    const wsel = $("#global-window");
+    if (wsel) wsel.addEventListener("change", () => { if (analyticsLoaded) initAnalytics(); });
+    // Re-render charts on resize (redraw from cached data, no refetch).
+    let rz; window.addEventListener("resize", () => {
+      clearTimeout(rz);
+      rz = setTimeout(() => {
+        const gp = $("#tab-graphs");
+        if (analyticsLoaded && lastAnalytics && gp && gp.classList.contains("active")) renderAnalytics(lastAnalytics);
+      }, 200);
+    });
     if ($("#module-root")) initModule();
     else refreshPage();
   });
