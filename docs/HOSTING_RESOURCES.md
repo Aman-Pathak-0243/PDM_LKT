@@ -57,8 +57,14 @@ the single largest DataFrame, not the sum of all modules.
   not required to run the PdM system.
 - **No runtime CDN / internet** — the frontend uses vendored JS/CSS so the dashboard
   works fully on an air-gapped LAN.
-- **Docker-ready** — a `Dockerfile` + `docker-compose.yml` exist for client delivery
-  (env-driven config, healthcheck on `/api/health`, a persistent data volume).
+- **Docker (recommended for delivery)** — a `Dockerfile` + `docker-compose.yml` package the
+  whole system (dashboard + automation) as one container: env-driven config (`.env` via
+  `env_file`), a healthcheck on `/api/health`, and **bind-mounted** `./database` + `./logs`
+  host folders so the CSV store/raw/analytics and logs persist on the host and are easy to
+  back up. Reachable on the LAN at `http://<host-ip>:8800`. Step-by-step (including the
+  firewall rule and a `192.168.x.x` example): **README → "Deploy with Docker (another PC)"**.
+  Build once (`docker compose up -d --build`); it downloads the Playwright/Chromium base image
+  (~1–2 GB) and installs deps.
 
 ---
 

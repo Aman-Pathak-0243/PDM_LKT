@@ -1,31 +1,40 @@
-# Local/LAN deployment for client delivery.
-# The app reaches Grafana (and, only when permitted, MySQL) on the host network /
-# company LAN. Runtime data persists on a named volume so triggers, history, and
-# the longitudinal store survive restarts. Automation runs inside the container
-# process — it keeps running whether or not a browser is connected.
+# Local / LAN deployment for client delivery.
+#
+# One container serves the dashboard AND runs automation (APScheduler) in the same
+# process — closing the browser never stops background runs; only `docker compose
+# down`/`stop` does. The container reaches Grafana (and, only when permitted, MySQL)
+# outbound on the company LAN.
+#
+# Data persists to bind-mounted host folders (./database, ./logs) so the CSV store,
+# raw snapshots, and analytics extracts survive restarts and are visible for backup
+# — the same folders a native `python run.py` writes to.
+#
+# Quick start (see README "Deploy with Docker"):
+#   1) cp .env.example .env   &&   edit .env (Grafana URL + credentials)
+#   2) docker compose up -d --build
+#   3) open http://<this-host-ip>:8800   (e.g. http://192.168.27.132:8800)
 services:
   pdm:
     build: .
     image: asrs-pdm:latest
     container_name: asrs-pdm
     restart: unless-stopped
-    env_file: .env
-    environment:
-      DATA_DIR: /data/store_root
-      LOG_DIR: /data/logs
-      APP_HOST: 0.0.0.0
-      APP_PORT: 8800
+    env_file: .env                 # Grafana URL/credentials, STORAGE_BACKEND, RAW_CAPTURE, …
+    environment:                   # container-specific overrides (win over .env)
+      STORAGE_BACKEND: csv         # CSV only; MySQL stays dormant (no permission)
+      DATA_DIR: /app/database      # -> bind-mounted to ./database on the host
+      LOG_DIR: /app/logs           # -> bind-mounted to ./logs on the host
+      APP_HOST: 0.0.0.0            # bind all interfaces so the LAN can reach it
+      APP_PORT: "8800"
       PLAYWRIGHT_HEADLESS: "true"
     ports:
-      - "8800:8800"
+      - "8800:8800"                # http://<host-ip>:8800 on the LAN
     volumes:
-      - pdm_data:/data
+      - ./database:/app/database   # CSV store + raw/ + analytics/ + archive/ + exports/
+      - ./logs:/app/logs           # structured JSON logs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8800/api/health').status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
-
-volumes:
-  pdm_data:
+      start_period: 25s

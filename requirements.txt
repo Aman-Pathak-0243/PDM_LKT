@@ -3,6 +3,7 @@
 
 # --- Config / env ---
 python-dotenv>=1.0.1
+PyYAML>=6.0                 # each module's spec.py loads its module.yaml (yaml.safe_load)
 
 # --- Grafana fetching ---
 playwright>=1.44.0          # Chromium login + CSV download (mandated by starter.md §2/§4)

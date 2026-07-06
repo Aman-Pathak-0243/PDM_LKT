@@ -114,6 +114,91 @@ python scripts/build_analytics_dataset.py   # -> database/analytics/
 
 ---
 
+## Deploy with Docker (another PC)
+
+The whole system ships as **one container** (dashboard + automation). This is the
+recommended way to run it on a delivery/plant PC. The example host below is
+**`192.168.27.132`** — substitute your machine's LAN IP.
+
+### 0. Prerequisites (on the target PC)
+- **Docker** with the Compose plugin.
+  - **Windows:** install **Docker Desktop** (uses the WSL 2 backend). Ensure it's running.
+  - **Linux:** `docker` engine + `docker compose` plugin.
+- Network line-of-sight from this PC to the **Grafana server** on the LAN (the container
+  fetches panels outbound). No inbound internet needed.
+
+### 1. Copy the project to the PC
+Clone the repo or copy the project folder to `192.168.27.132` (e.g. `C:\PdM\PDM_LKT`).
+Everything needed is in the folder; the CSV data and `.env` are **not** in git — you create
+`.env` in the next step.
+
+### 2. Create `.env` (secrets + Grafana URL)
+`.env` is read at runtime (via `env_file`), never baked into the image. From the project root:
+```bash
+cp .env.example .env
+```
+Then edit `.env` and set at least:
+- `GRAFANA_BASE_URL`, `GRAFANA_USERNAME`, `GRAFANA_PASSWORD`
+- the `*__DASHBOARD_NAME` module dashboard URLs (per module)
+- keep `STORAGE_BACKEND=csv` and `RAW_CAPTURE=true` (defaults)
+
+`DATA_DIR`/`LOG_DIR`/`APP_HOST`/`APP_PORT` are set for you by `docker-compose.yml` — no need to change them.
+
+### 3. Build & start
+From the project root (where `docker-compose.yml` is):
+```bash
+docker compose up -d --build
+```
+First build downloads the Playwright/Chromium base image (~1–2 GB) and installs deps — a few
+minutes. Subsequent starts are instant.
+
+### 4. Verify
+```bash
+docker compose ps                 # STATUS should become healthy
+docker compose logs -f pdm        # watch startup ("application started", modules registered)
+curl http://localhost:8800/api/health
+```
+
+### 5. Open it on the LAN
+From any device on the same subnet: **`http://192.168.27.132:8800`**.
+On the host PC itself: `http://localhost:8800`.
+
+Open the port in the host firewall so other machines can reach it:
+- **Windows** (PowerShell, as Administrator):
+  ```powershell
+  New-NetFirewallRule -DisplayName "ASRS PdM 8800" -Direction Inbound -Protocol TCP -LocalPort 8800 -Action Allow
+  ```
+  Find the PC's IP with `ipconfig` (the `192.168.x.x` IPv4 address).
+- **Linux:** `sudo ufw allow 8800/tcp` (if `ufw` is active).
+
+### Where the data lives
+`docker-compose.yml` **bind-mounts** the data to host folders next to the project, so it
+survives restarts/rebuilds and is easy to back up or analyse:
+- `./database/` — the CSV store (`store/`), raw per-run snapshots (`raw/`), analytics
+  extracts (`analytics/`), `archive/`, `exports/`.
+- `./logs/` — structured JSON logs.
+
+Automation runs **inside the container**, independent of any browser — closing the dashboard
+never stops scheduled runs; only stopping the container does.
+
+### Day-to-day operations
+```bash
+docker compose stop               # pause (keeps data)         | docker compose start
+docker compose restart pdm        # restart the app
+docker compose logs -f pdm        # tail logs
+docker compose down               # stop & remove the container (data stays in ./database)
+git pull && docker compose up -d --build   # update to a new version
+# rebuild the analytics extracts inside the container:
+docker compose exec pdm python scripts/build_analytics_dataset.py
+# back up the data: just copy the ./database folder (and .env, stored separately/securely)
+```
+
+> Notes: keep `.env` out of version control (it holds the Grafana password). On Linux,
+> bind-mounted files are created as `root`; adjust ownership if needed. MySQL remains
+> dormant — this deployment is CSV-only.
+
+---
+
 ## Developer guide
 
 ### Architecture
